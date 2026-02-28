@@ -235,17 +235,18 @@ if (g.state == GameState.paused) {
     final elapsed = 120 - g.starAnimT; // 0→120 as time goes on
 
     final cx = W / 2;
-    final topY = H * 0.20;
-    const rowH = 80.0;
-    const starR = 26.0;
-    const innerR = 11.0;
+   const rowH = 44.0;
+    const panelH = rowH * 3 + 90.0;
+    final topY = (H - panelH) / 2 + 30;
+    const starR = 13.0;
+    const innerR = 5.5;
 
     // Dark panel background
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(W * 0.06, topY - 50, W * 0.88, rowH * 3 + 150),
         const Radius.circular(24)),
-      Paint()..color = Colors.black.withOpacity(0.75));
+      Paint()..color = Colors.black.withOpacity(0.95));
 
     // Title
     final titleLabel = g.lastLevelStars == 3
@@ -254,14 +255,14 @@ if (g.state == GameState.paused) {
     final titleColor = g.lastLevelStars == 3
         ? const Color(0xFFFFE135)
         : g.lastLevelStars == 2 ? const Color(0xFF00FF88) : Colors.white;
-    _drawText(canvas, titleLabel, Offset(cx, topY - 15), 28,
+    _drawText(canvas, titleLabel, Offset(cx, topY - 15), 16,
         color: titleColor, bold: true);
 
     // Row definitions
     final rowData = [
       (label: 'Level Cleared',  earned: true),
       (label: 'No Lives Lost',  earned: g.perfectClear),
-      (label: 'Under 60 Secs', earned: g.levelFrameCount < 60 * 60),
+      (label: 'Under 30 Secs', earned: g.levelFrameCount < 30 * 60),
     ];
 
     // Each row appears every 30 frames: row0 at t=20, row1 at t=50, row2 at t=80
@@ -304,19 +305,27 @@ if (g.state == GameState.paused) {
       path.close();
 
       if (earned) {
-        // Glow
+        // Outer glow
         canvas.drawPath(path, Paint()
-          ..color = const Color(0xFFFFE500).withOpacity(0.5)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12));
-        // Fill
+          ..color = const Color(0xFFFFE500).withOpacity(0.8)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
+        // Base yellow fill
+        canvas.drawPath(path, Paint()..color = const Color(0xFFFFD700));
+        // Glossy gradient overlay
         canvas.drawPath(path, Paint()
-          ..shader = const RadialGradient(
-            colors: [Colors.white, Color(0xFFFFE135), Color(0xFFFF8800)],
-            stops: [0.0, 0.5, 1.0],
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withOpacity(0.9),
+              const Color(0xFFFFE500).withOpacity(0.8),
+              const Color(0xFFFFB800),
+            ],
+            stops: const [0.0, 0.4, 1.0],
           ).createShader(Rect.fromCircle(center: Offset(starX, rowY), radius: starR)));
-        // Border
+        // Bright border
         canvas.drawPath(path, Paint()
-          ..color = Colors.white.withOpacity(0.8)
+          ..color = const Color(0xFFFFF176)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.5);
       } else {
@@ -329,12 +338,12 @@ if (g.state == GameState.paused) {
       }
 
       // Label
-      _drawText(canvas, rowData[i].label, Offset(cx + 14, rowY), 20,
+     _drawText(canvas, rowData[i].label, Offset(cx + 14, rowY), 11,
           color: earned ? Colors.white : Colors.white38, bold: earned);
 
       // Tick or cross
       _drawText(canvas, earned ? '✓' : '✗',
-          Offset(cx + W * 0.33, rowY), 20,
+          Offset(cx + W * 0.33, rowY), 11,
           color: earned ? const Color(0xFF00FF88) : Colors.white24, bold: true);
 
       canvas.restore();
@@ -343,8 +352,8 @@ if (g.state == GameState.paused) {
     // Tap to continue — appears after all rows shown
     if (elapsed >= 95) {
       final pulse = sin(animTime * 4) * 0.3 + 0.7;
-      _drawText(canvas, '▶  TAP TO CONTINUE',
-          Offset(cx, topY + 30 + 3 * rowH + 30), 17,
+      _drawText(canvas, '▶  TAP TO CONTINUE TO LEVEL > ${g.level + 1}',
+          Offset(cx, topY + 30 + 3 * rowH + 10), 17,
           color: const Color(0xFF00E5FF).withOpacity(pulse), bold: true);
     }
   }

@@ -131,6 +131,14 @@ void togglePause() {
   notifyListeners();
 }
   void update() {
+    // Tick star animation even during clear screen
+    if (state == GameState.clear) {
+      if (starAnimT > 1) {
+        starAnimT--;
+        notifyListeners();
+      }
+      return;
+    }
     if (state != GameState.playing) return;
 
     // Powerup timers
@@ -432,7 +440,7 @@ scorePopups.removeWhere((p) => (p['life'] as double) <= 0);
     // Level timer
     levelFrameCount++;
     if (starAnimT > 0) starAnimT--;
-    if (state == GameState.clear && starAnimT == 0) starAnimT = 1; // freeze on last frame
+
 
     // Combo timer
     if (comboTimer > 0) {
@@ -453,7 +461,7 @@ scorePopups.removeWhere((p) => (p['life'] as double) <= 0);
       // Calculate stars
       int stars = 1; // always get 1 star for clearing
       if (perfectClear) stars++; // 2nd star: no lives lost
-      if (levelFrameCount < 60 * 60) stars++; // 3rd star: under 60 seconds (60fps)
+      if (levelFrameCount < 30 * 60) stars++; // 3rd star: under 30 seconds (60fps)
       lastLevelStars = stars;
       // Save best star count for this level
       if ((levelStars[level] ?? 0) < stars) levelStars[level] = stars;

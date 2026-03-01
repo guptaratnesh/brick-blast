@@ -584,16 +584,11 @@ List<Brick> makeBricks({
       ], hpOverride: 2);
       break;   
   }
-// Randomly assign flowerpot power to some bricks
+/* FLOWERPOT BRICK ASSIGNMENT DISABLED
   final rng2 = Random();
-  final potCount = min(1, bricks.length);
-  final indices = <int>{};
-  while (indices.length < potCount) {
-    indices.add(rng2.nextInt(bricks.length));
-  }
-  for (final i in indices) {
-    bricks[i].hiddenPower = PowerupType.flowerpot;
-  }
+  ...
+  bricks[i].hiddenPower = PowerupType.flowerpot;
+*/
 
   return bricks;
 }
@@ -605,7 +600,7 @@ PowerupDrop? trySpawnDrop(double x, double y, double screenW, {
   int countMulti = 10,
   int countWide = 10,
   int countLaser = 1,
-  int countFlowerpot = 50,
+  // int countFlowerpot = 50, // flowerpot disabled
   int countGun = 1,
 }) {
   final rng = Random();

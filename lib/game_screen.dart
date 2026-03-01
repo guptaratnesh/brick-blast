@@ -63,6 +63,13 @@ void initState() {
     _game.togglePause();
   } else if (_game.state == GameState.clear) {
     _game.nextLevel();
+  } else if (_game.state == GameState.playing) {
+    // Tap skin icon area (top-right, roughly where emoji is)
+    final screenW = MediaQuery.of(context).size.width;
+    final skinIconX = screenW - 108;
+    if (pos.dx > skinIconX - 24 && pos.dx < skinIconX + 24 && pos.dy < 100) {
+      _game.cyclePaddleSkin();
+    }
   }
 }
 

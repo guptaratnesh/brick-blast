@@ -31,10 +31,13 @@ int whirlgigT = 0;
 double whirlgigX = 0, whirlgigY = 0;
 List<Map<String, dynamic>> whirlgigParticles = [];
 
-// Flowerpot
+// Flowerpot — DISABLED
+// bool flowerpotActive = false;
+// int flowerpotT = 0;
+// List<Map<String, dynamic>> flowerpotParticles = [];
 bool flowerpotActive = false;
 int flowerpotT = 0;
-List<Map<String, dynamic>> flowerpotParticles = [];
+List<Map<String, dynamic>> flowerpotParticles = []; // kept for compile compat
 
 // Laser
 List<Map<String, double>> laserRays = [];
@@ -56,11 +59,17 @@ bool fireUsedThisLevel = false;
 bool bigUsedThisLevel = false;
 bool multiUsedThisLevel = false;
 bool wideUsedThisLevel = false;
-bool flowerpotUsedThisLevel = false;
+bool flowerpotUsedThisLevel = false; // flowerpot disabled
 bool whirlgigUsedThisLevel = false;
 
 // 3-Star system
-Map<int, int> levelStars = {}; // level -> best stars earned (1-3)
+Map<int, int> levelStars = {};
+
+// Feature vars
+int lastLifePulseT = 0;       // counts up while lives == 1, drives red pulse
+bool luckySaveActive = false; // near miss detected
+int luckyT = 0;               // countdown for LUCKY! display
+int paddleSkin = 0;           // 0=neon, 1=fire, 2=ice, 3=gold // level -> best stars earned (1-3)
 int livesAtLevelStart = 10;
 int levelStartFrame = 0;
 int levelFrameCount = 0;
@@ -102,7 +111,7 @@ int bossCountdownT = 0; // counts down 180 frames (3 seconds)
   combo = 0; comboTimer = 0;
   puFire = puBig = puMulti = puWide = puLaser = false;
   puFireT = puBigT = puMultiT = puWideT = puLaserT = 0;
-  countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; countFlowerpot = 1;
+  countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; /* countFlowerpot disabled */
   laserRays.clear();
   puMagnet = false; puMagnetT = 0; magnetUsedThisLevel = false;
   puGun = false; puGunT = 0; gunUsedThisLevel = false; gunFireCooldown = 0; bullets.clear();
@@ -111,16 +120,17 @@ int bossCountdownT = 0; // counts down 180 frames (3 seconds)
   perfectClear = true;
   showStarAnimation = false;
   starAnimT = 0; laserSpinAngle = 0.0;
+  lastLifePulseT = 0; luckySaveActive = false; luckyT = 0;
 laserUsedThisLevel = false;
 fireUsedThisLevel = false;
 bigUsedThisLevel = false;
 multiUsedThisLevel = false;
 wideUsedThisLevel = false;
-flowerpotUsedThisLevel = false;
+// flowerpotUsedThisLevel = false; // flowerpot disabled
 whirlgigUsedThisLevel = false;
 whirlgigActive = false; whirlgigT = 0; whirlgigParticles.clear();
 flowerpotActive = false; flowerpotT = 0; flowerpotParticles.clear();
-countFlowerpot = 50;
+// countFlowerpot = 50; // flowerpot disabled
   particles.clear(); drops.clear(); scorePopups.clear();
   levelStars.clear();
   livesAtLevelStart = 10;
@@ -142,6 +152,11 @@ _markCenterBrick();
   void movePaddle(double x) {
     padX = (x - padW / 2).clamp(0, screenW - padW);
   }
+
+void cyclePaddleSkin() {
+  paddleSkin = (paddleSkin + 1) % 4;
+  notifyListeners();
+}
 
 void togglePause() {
   if (state == GameState.playing) {
@@ -191,10 +206,10 @@ if (puGun) {
     gunFireCooldown--;
   } else {
     gunFireCooldown = 8; // fire every 8 frames
-    // Left barrel
-    bullets.add({'x': padX + 6, 'y': padY - 6, 'vy': -14.0});
-    // Right barrel
-    bullets.add({'x': padX + padW - 6, 'y': padY - 6, 'vy': -14.0});
+    if (bullets.length < 12) { // cap at 12 bullets on screen
+      bullets.add({'x': padX + 6, 'y': padY - 6, 'vy': -14.0});
+      bullets.add({'x': padX + padW - 6, 'y': padY - 6, 'vy': -14.0});
+    }
   }
 }
 
@@ -262,6 +277,11 @@ if (puLaser) laserSpinAngle += 0.05;
           b.y + b.r > padY && b.y - b.r < padY + padH) {
         b.vy = -b.vy.abs();
         final hit = (b.x - padX) / padW;
+        // Near miss detection — hit within 10% of either edge
+        if (hit < 0.12 || hit > 0.88) {
+          luckySaveActive = true;
+          luckyT = 90; // show for 1.5 seconds
+        }
         b.vx = (hit - 0.5) * 12;
         final spd = sqrt(b.vx * b.vx + b.vy * b.vy);
         final target = 6.0 + level * 0.4;
@@ -297,7 +317,7 @@ if (b.laser && (puLaserT % 10 == 0)) {
             ry >= br.y && ry <= br.y + br.h) {
           br.hp--;
           br.shakeFrames = 5;
-          if (laserRays.length < 30) {
+          if (laserRays.length < 15) {
             laserRays.add({'x1': cx, 'y1': cy, 'x2': br.x + br.w / 2, 'y2': br.y + br.h / 2, 'life': 1.0});
           }
           if (br.hp <= 0) {
@@ -362,7 +382,7 @@ if (b.laser && (puLaserT % 10 == 0)) {
   if (br.hiddenPower != null) {
   // Only drop if not already used this level
   bool alreadyUsed = false;
-  if (br.hiddenPower == PowerupType.flowerpot && flowerpotUsedThisLevel) alreadyUsed = true;
+  // if (br.hiddenPower == PowerupType.flowerpot && flowerpotUsedThisLevel) alreadyUsed = true; // disabled
   if (br.hiddenPower == PowerupType.fire      && fireUsedThisLevel)      alreadyUsed = true;
   if (br.hiddenPower == PowerupType.big       && bigUsedThisLevel)       alreadyUsed = true;
   if (br.hiddenPower == PowerupType.multi     && multiUsedThisLevel)     alreadyUsed = true;
@@ -389,7 +409,7 @@ if (b.laser && (puLaserT % 10 == 0)) {
   countMulti: multiUsedThisLevel ? 0 : countMulti,
   countWide: wideUsedThisLevel ? 0 : countWide,
   countLaser: laserUsedThisLevel ? 0 : countLaser,
-  countFlowerpot: flowerpotUsedThisLevel ? 0 : countFlowerpot,
+  // countFlowerpot: flowerpotUsedThisLevel ? 0 : countFlowerpot, // disabled
   countGun: gunUsedThisLevel ? 0 : 1,
 );
     
@@ -433,70 +453,19 @@ if (b.laser && (puLaserT % 10 == 0)) {
     });
 
 
-// Update flowerpot
+/* FLOWERPOT DISABLED
 if (flowerpotActive) {
   flowerpotT--;
 if (flowerpotT <= 0) {
   flowerpotActive = false;
   flowerpotParticles.clear();
-  // Reset paddle to normal width
   padW = min(screenW * 0.28, 120);
   padX = (screenW / 2) - (padW / 2);
 }
 
-  final rng = Random();
-  // Keep spawning new flower burst particles
-  if (flowerpotT % 8 == 0) {
-    for (int i = 0; i < 12; i++) {
-      final angle = (i / 12) * 3.14159 * 2;
-      final speed = 6.0 + rng.nextDouble() * 8;
-      flowerpotParticles.add({
-        'x': padX + padW / 2,
-        'y': padY,
-        'vx': cos(angle) * speed,
-        'vy': sin(angle) * speed - 8, // shoot higher
-        'life': 1.0,
-        'decay': 0.012 + rng.nextDouble() * 0.008,
-        'r': 4.0 + rng.nextDouble() * 5,
-        'color': [
-          0xFFFF69B4, 0xFFFF4444, 0xFFFFE135,
-          0xFF00FF88, 0xFFFF8800, 0xFFFF00FF,
-        ][rng.nextInt(6)],
-        'active': true,
-      });
-    }
-  }
-  
-  for (final p in flowerpotParticles) {
-  p['x'] = (p['x'] as double) + (p['vx'] as double);
-  p['y'] = (p['y'] as double) + (p['vy'] as double);
-  p['vy'] = (p['vy'] as double) + 0.08; // less gravity so sparks reach higher
-  p['vx'] = (p['vx'] as double) * 0.99;
-  p['life'] = (p['life'] as double) - (p['decay'] as double);
+// FLOWERPOT PARTICLE LOGIC DISABLED
+*/ // end FLOWERPOT DISABLED block
 
-  // Check if spark hits any brick
-  final px = p['x'] as double;
-  final py = p['y'] as double;
-  for (final br in bricks) {
-    if (!br.alive) continue;
-    if (px >= br.x && px <= br.x + br.w &&
-        py >= br.y && py <= br.y + br.h) {
-      br.hp--;
-      br.shakeFrames = 5;
-      if (br.hp <= 0) {
-        br.alive = false;
-        combo++;
-        comboTimer = 90;
-        score += 10 * level + combo * 5;
-        spawnParticles(particles, br.x + br.w / 2, br.y + br.h / 2, br.color, 12);
-      }
-      p['life'] = 0.0; // spark dies after hitting brick
-      break;
-    }
-  }
-}
-flowerpotParticles.removeWhere((p) => (p['life'] as double) <= 0);
-}
 
 // Update whirlgig
 if (whirlgigActive) {
@@ -544,6 +513,15 @@ scorePopups.removeWhere((p) => (p['life'] as double) <= 0);
       combo = 0;
     }
 
+    // Last-life pulse timer
+    if (lives == 1) {
+      lastLifePulseT++;
+    } else {
+      lastLifePulseT = 0;
+    }
+    // Lucky save countdown
+    if (luckyT > 0) luckyT--;
+
     // Shake bricks
     for (final br in bricks) {
       if (br.shakeFrames > 0) br.shakeFrames--;
@@ -587,9 +565,9 @@ void nextLevel() {
   countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; countFlowerpot = 1;
   laserRays.clear();
   puMagnet = true; puMagnetT = 300; magnetUsedThisLevel = false; // magnet gift on every level start
-  flowerpotActive = false;
-  flowerpotT = 0;
-  flowerpotParticles.clear();
+  // flowerpotActive = false; // flowerpot disabled
+  // flowerpotT = 0;
+  // flowerpotParticles.clear();
   drops.clear();
   scorePopups.clear();
   livesAtLevelStart = lives;
@@ -644,12 +622,12 @@ void _triggerWhirlgig(double x, double y) {
 
   final rng = Random();
   // Spawn spiral firework particles
-  for (int ring = 0; ring < 6; ring++) {
-    for (int i = 0; i < 20; i++) {
+  for (int ring = 0; ring < 4; ring++) {
+    for (int i = 0; i < 12; i++) {
       final angle = (i / 20) * 3.14159 * 2;
       final speed = 2.0 + ring * 1.5;
       final delay = ring * 8; // staggered rings
-      whirlgigParticles.add({
+      if (whirlgigParticles.length < 50) whirlgigParticles.add({
         'x': x, 'y': y,
         'vx': cos(angle) * speed,
         'vy': sin(angle) * speed,
@@ -758,15 +736,7 @@ void _addScorePopup(double x, double y, int points, Color brickColor) {
       }
       SoundManager.instance.playLaserPower();
     case PowerupType.flowerpot:
-      if (countFlowerpot <= 0 || flowerpotUsedThisLevel) break;
-      flowerpotUsedThisLevel = true;
-      countFlowerpot--;
-      flowerpotActive = true;
-      flowerpotT = 300;
-      flowerpotParticles.clear();
-      padW = screenW * 0.9;
-      padX = (screenW / 2) - (padW / 2);
-      SoundManager.instance.playFlowerpot();
+      break; // disabled
     case PowerupType.whirlgig:
   break;
     case PowerupType.magnet:

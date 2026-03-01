@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'game_controller.dart';
@@ -7,6 +8,26 @@ import 'game_models.dart';
 class GamePainter extends CustomPainter {
   final GameController g;
   final double animTime;
+
+  // Cached grid picture — drawn once, replayed every frame
+  ui.Picture? _gridPicture;
+  double _gridW = 0, _gridH = 0;
+
+  // Cached gradients — created once, reused every frame
+  static const _ballGradientNormal = RadialGradient(
+    center: Alignment(-0.3, -0.3),
+    colors: [Colors.white, Color(0xFF00E5FF), Color(0xFF0055AA)],
+    stops: [0.0, 0.4, 1.0],
+  );
+  static const _ballGradientFire = RadialGradient(
+    center: Alignment(-0.3, -0.3),
+    colors: [Colors.white, Color(0xFFFF8800), Color(0xFFFF2200)],
+    stops: [0.0, 0.4, 1.0],
+  );
+  static const _laserStarGradient = RadialGradient(
+    colors: [Colors.white, Color(0xFFFFE500), Color(0xFFFF6600)],
+    stops: [0.0, 0.5, 1.0],
+  );
 
   GamePainter(this.g, this.animTime);
 
@@ -21,8 +42,36 @@ class GamePainter extends CustomPainter {
       Paint()..color = const Color(0xFF111111),
     );
 
-    // Grid
-    _drawGrid(canvas, W, H);
+    // Last-life red pulse overlay
+    if (g.lives == 1 && g.state == GameState.playing) {
+      final pulse = sin(g.lastLifePulseT * 0.12) * 0.5 + 0.5;
+      canvas.drawRect(Rect.fromLTWH(0, 0, W, H),
+          Paint()..color = const Color(0xFFCC0000).withOpacity(0.18 * pulse));
+      // Red border vignette
+      canvas.drawRect(Rect.fromLTWH(0, 0, W, H),
+        Paint()
+          ..color = const Color(0xFFFF0000).withOpacity(0.5 * pulse)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 14);
+    }
+
+    // Grid — cached as Picture, rebuilt only when screen size changes
+    if (_gridPicture == null || _gridW != W || _gridH != H) {
+      _gridW = W; _gridH = H;
+      final recorder = ui.PictureRecorder();
+      final gridCanvas = Canvas(recorder);
+      final paint = Paint()
+        ..color = Colors.white.withOpacity(0.03)
+        ..strokeWidth = 1;
+      for (double x = 0; x < W; x += 40) {
+        gridCanvas.drawLine(Offset(x, 0), Offset(x, H), paint);
+      }
+      for (double y = 0; y < H; y += 40) {
+        gridCanvas.drawLine(Offset(0, y), Offset(W, y), paint);
+      }
+      _gridPicture = recorder.endRecording();
+    }
+    canvas.drawPicture(_gridPicture!);
 
     // Bricks
     for (int i = 0; i < g.bricks.length; i++) {
@@ -46,75 +95,22 @@ class GamePainter extends CustomPainter {
 // ── ADD THIS LASER RAYS BLOCK HERE ──
 for (final ray in g.laserRays) {
   final opacity = ray['life']!.clamp(0.0, 1.0);
-  // Outer purple glow
-  canvas.drawLine(
-    Offset(ray['x1']!, ray['y1']!),
-    Offset(ray['x2']!, ray['y2']!),
-    Paint()
-      ..color = const Color(0xFFFF00FF).withOpacity(opacity * 0.3)
-      ..strokeWidth = 10
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-  );
-  // Middle beam
-  canvas.drawLine(
-    Offset(ray['x1']!, ray['y1']!),
-    Offset(ray['x2']!, ray['y2']!),
-    Paint()
+  final p1 = Offset(ray['x1']!, ray['y1']!);
+  final p2 = Offset(ray['x2']!, ray['y2']!);
+  // Middle beam (no blur — too expensive per ray)
+  canvas.drawLine(p1, p2, Paint()
       ..color = const Color(0xFFFF00FF).withOpacity(opacity * 0.8)
-      ..strokeWidth = 3,
-  );
+      ..strokeWidth = 3);
   // White core
-  canvas.drawLine(
-    Offset(ray['x1']!, ray['y1']!),
-    Offset(ray['x2']!, ray['y2']!),
-    Paint()
+  canvas.drawLine(p1, p2, Paint()
       ..color = Colors.white.withOpacity(opacity)
-      ..strokeWidth = 1.5,
-  );
+      ..strokeWidth = 1.5);
 }
 // ── END LASER RAYS BLOCK ──
 
-// Flowerpot fireworks from paddle
-if (g.flowerpotActive) {
-  for (final p in g.flowerpotParticles) {
-    if (!(p['active'] as bool)) continue;
-    final life = (p['life'] as double).clamp(0.0, 1.0);
-    final r = (p['r'] as double) * life;
-    final color = Color(p['color'] as int).withOpacity(life);
-
-    // Glow
-    canvas.drawCircle(
-      Offset(p['x'] as double, p['y'] as double),
-      r + 5,
-      Paint()
-        ..color = color.withOpacity(life * 0.3)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-    );
-    // Core spark
-    canvas.drawCircle(
-      Offset(p['x'] as double, p['y'] as double),
-      r,
-      Paint()..color = color,
-    );
-    // Star shape for flower effect
-    canvas.drawCircle(
-      Offset(p['x'] as double, p['y'] as double),
-      r * 0.4,
-      Paint()..color = Colors.white.withOpacity(life * 0.8),
-    );
-  }
-
-  // Glow on paddle when active
-  canvas.drawRRect(
-    RRect.fromRectAndRadius(
-      Rect.fromLTWH(g.padX - 4, g.padY - 4, g.padW + 8, g.padH + 8),
-      const Radius.circular(12),
-    ),
-    Paint()
-      ..color = const Color(0xFFFF69B4).withOpacity(0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
-  );
-}
+/* FLOWERPOT DRAWING DISABLED
+if (g.flowerpotActive) { ... }
+*/
 // Whirlgig fireworks
 if (g.whirlgigActive) {
   for (final p in g.whirlgigParticles) {
@@ -123,15 +119,7 @@ if (g.whirlgigActive) {
     final r = (p['r'] as double) * life;
     final color = Color(p['color'] as int).withOpacity(life.clamp(0.0, 1.0));
 
-    // Glow
-    canvas.drawCircle(
-      Offset(p['x'] as double, p['y'] as double),
-      r + 4,
-      Paint()
-        ..color = color.withOpacity(life * 0.3)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-    );
-    // Core
+    // Core (no per-particle blur — expensive on low-end)
     canvas.drawCircle(
       Offset(p['x'] as double, p['y'] as double),
       r,
@@ -161,11 +149,7 @@ if (g.whirlgigActive) {
     for (final b in g.bullets) {
       final bx = b['x']!;
       final by = b['y']!;
-      // Glow
-      canvas.drawCircle(Offset(bx, by), 7,
-          Paint()..color = const Color(0xFFFFFF00).withOpacity(0.3)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
-      // Core bullet
+      // Core bullet (no blur — capped at 12 max)
       canvas.drawRRect(
         RRect.fromRectAndRadius(Rect.fromLTWH(bx - 3, by - 8, 6, 14), const Radius.circular(3)),
         Paint()..color = const Color(0xFFFFFF00));
@@ -222,6 +206,14 @@ if (g.state == GameState.paused) {
           Offset(W / 2, H / 2 - 40), fontSize,
           color: const Color(0xFFFFE135).withOpacity(opacity),
           bold: true);
+    }
+
+    // Lucky save popup
+    if (g.luckyT > 0) {
+      final fade = (g.luckyT / 90.0).clamp(0.0, 1.0);
+      final scale = fade < 0.2 ? fade / 0.2 : 1.0; // pop in
+      _drawText(canvas, '🍀 LUCKY SAVE!', Offset(W / 2, H * 0.42),
+          22 * scale, color: const Color(0xFF00FF88).withOpacity(fade), bold: true);
     }
 
     // Overlays
@@ -506,11 +498,9 @@ canvas.drawRRect(
   Paint()..color = Colors.white.withOpacity(0.22),
 );
 
-// Flowerpot icon on brick
-if (b.hiddenPower == PowerupType.flowerpot) {
-  _drawText(canvas, '🌸', Offset(b.x + ox + b.w / 2, b.y + b.h / 2), 
-      b.h * 0.55, color: Colors.white);
-}
+/* FLOWERPOT BRICK ICON DISABLED
+if (b.hiddenPower == PowerupType.flowerpot) { ... }
+*/
     // HP bar
     if (b.maxHp > 1) {
       canvas.drawRect(
@@ -549,15 +539,8 @@ if (b.hiddenPower == PowerupType.flowerpot) {
         ..color = glowColor.withOpacity(0.25)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
 
-  // Ball gradient
-  final List<Color> ballColors = b.fire
-      ? [Colors.white, const Color(0xFFFF8800), const Color(0xFFFF2200)]
-      : [Colors.white, const Color(0xFF00E5FF), const Color(0xFF0055AA)];
-  final gradient = RadialGradient(
-    center: const Alignment(-0.3, -0.3),
-    colors: ballColors,
-    stops: const [0.0, 0.4, 1.0],
-  );
+  // Ball gradient — use cached gradient, only createShader (cheap rect math only)
+  final gradient = b.fire ? _ballGradientFire : _ballGradientNormal;
   final paint = Paint()
     ..shader = gradient.createShader(
         Rect.fromCircle(center: Offset(b.x, b.y), radius: b.r));
@@ -628,10 +611,8 @@ if (b.hiddenPower == PowerupType.flowerpot) {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
   canvas.drawPath(starPath,
     Paint()
-      ..shader = const RadialGradient(
-        colors: [Colors.white, Color(0xFFFFE500), Color(0xFFFF6600)],
-        stops: [0.0, 0.5, 1.0],
-      ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: starR)));
+      ..shader = _laserStarGradient.createShader(
+          Rect.fromCircle(center: Offset(cx, cy), radius: starR)));
   canvas.drawPath(starPath,
     Paint()
       ..color = Colors.white.withOpacity(0.9)
@@ -652,34 +633,46 @@ if (b.hiddenPower == PowerupType.flowerpot) {
       const Radius.circular(8),
     );
 
+    // Paddle skin colors
+    // 0=neon(cyan), 1=fire(orange), 2=ice(light blue), 3=gold
+    final skinColors = [
+      [const Color(0xFF00FFFF), const Color(0xFF00E5FF)], // neon
+      [const Color(0xFFFF6600), const Color(0xFFFF3300)], // fire
+      [const Color(0xFFAAEEFF), const Color(0xFF66CCFF)], // ice
+      [const Color(0xFFFFE135), const Color(0xFFFFAA00)], // gold
+    ];
+    final skinGlow = [
+      const Color(0xFF00FFFF),
+      const Color(0xFFFF4400),
+      const Color(0xFF88DDFF),
+      const Color(0xFFFFE135),
+    ];
+    final s = g.paddleSkin.clamp(0, 3);
+    final glowColor = skinGlow[s];
+    final fillColor = skinColors[s][1];
+
     // Glow
-    canvas.drawRRect(
-      rect,
+    canvas.drawRRect(rect,
       Paint()
-        ..color = const Color(0xFF00FFFF).withOpacity(0.4)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
-    );
+        ..color = glowColor.withOpacity(0.4)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12));
 
     // Main fill
-    canvas.drawRRect(rect, Paint()..color = const Color(0xFF00E5FF));
+    canvas.drawRRect(rect, Paint()..color = fillColor);
 
     // Shine
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(g.padX + 6, g.padY + 3, g.padW - 12, 4),
-        const Radius.circular(3),
-      ),
-      Paint()..color = Colors.white.withOpacity(0.55),
-    );
+        const Radius.circular(3)),
+      Paint()..color = Colors.white.withOpacity(0.55));
 
     // Border
-    canvas.drawRRect(
-      rect,
+    canvas.drawRRect(rect,
       Paint()
         ..color = Colors.white
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
+        ..strokeWidth = 2);
 
     // Gun glow on paddle
     if (g.puGun) {
@@ -760,6 +753,11 @@ void _drawHUD(Canvas canvas, GameController g, double W, double H) {
   _drawText(canvas, 'LEVEL ${g.level}', Offset(W / 2, topPad + 24), 15,
       color: Colors.white, bold: true);
   // Big heart with life count inside
+  // Skin selector tap hint
+  final skinEmoji = ['🔵','🔥','🧊','🏆'][g.paddleSkin];
+  _drawText(canvas, skinEmoji, Offset(W - 108, topPad + 24), 16,
+      color: Colors.white);
+
   _drawText(canvas, '❤', Offset(W - 70, topPad + 24), 26,
       color: const Color(0xFFFF4466), bold: true);
   _drawText(canvas, '${g.lives}', Offset(W - 70, topPad + 24), 12,
@@ -791,7 +789,7 @@ void _drawPowerupStrip(Canvas canvas, GameController g, double W, double stripY)
   (label: '✦',  count: g.countMulti,     active: g.puMulti,        color: const Color(0xFFFFE135)),
   (label: '↔',  count: g.countWide,      active: g.puWide,         color: const Color(0xFF00FF88)),
   (label: '⚡', count: g.countLaser,     active: g.puLaser,        color: const Color(0xFFFFE500)),
-  (label: '🌸', count: g.countFlowerpot, active: g.flowerpotActive, color: const Color(0xFFFF69B4)),
+  // (label: '🌸', ...) // flowerpot disabled
   (label: '🧲', count: g.puMagnet ? 1 : 0, active: g.puMagnet,       color: const Color(0xFFFF00FF)),
   (label: '🔫', count: g.puGun   ? 1 : 0, active: g.puGun,          color: const Color(0xFFFFDD00)),
 ];

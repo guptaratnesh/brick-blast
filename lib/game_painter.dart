@@ -157,6 +157,23 @@ if (g.whirlgigActive) {
   _drawBall(canvas, b, animTime);
 }
 
+    // Bullets
+    for (final b in g.bullets) {
+      final bx = b['x']!;
+      final by = b['y']!;
+      // Glow
+      canvas.drawCircle(Offset(bx, by), 7,
+          Paint()..color = const Color(0xFFFFFF00).withOpacity(0.3)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+      // Core bullet
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(bx - 3, by - 8, 6, 14), const Radius.circular(3)),
+        Paint()..color = const Color(0xFFFFFF00));
+      // Bright tip
+      canvas.drawCircle(Offset(bx, by - 8), 3,
+          Paint()..color = Colors.white);
+    }
+
     // Paddle
     _drawPaddle(canvas, g);
 
@@ -225,6 +242,11 @@ if (g.state == GameState.paused) {
           color: const Color(0xFFFFE135).withOpacity(fade), bold: true);
       _drawText(canvas, 'GET READY!', Offset(W / 2, H / 2 + 24), 18,
           color: Colors.white.withOpacity(fade), bold: true);
+    }
+
+    // Boss countdown overlay
+    if (g.bossCountdownActive) {
+      _drawBossCountdown(canvas, g, W, H, animTime);
     }
   }
 
@@ -356,6 +378,79 @@ if (g.state == GameState.paused) {
           Offset(cx, topY + 30 + 3 * rowH + 10), 17,
           color: const Color(0xFF00E5FF).withOpacity(pulse), bold: true);
     }
+  }
+
+
+  void _drawBossCountdown(Canvas canvas, GameController g, double W, double H, double animTime) {
+    final t = g.bossCountdownT; // 180 → 0
+    final cx = W / 2;
+    final cy = H / 2;
+
+    // Full screen red flash background
+    final bgOpacity = (sin(animTime * 6) * 0.15 + 0.55).clamp(0.0, 1.0);
+    canvas.drawRect(Rect.fromLTWH(0, 0, W, H),
+        Paint()..color = const Color(0xFFCC0000).withOpacity(bgOpacity));
+
+    // Pulsing red border
+    final borderPulse = sin(animTime * 8) * 0.5 + 0.5;
+    canvas.drawRect(Rect.fromLTWH(0, 0, W, H),
+      Paint()
+        ..color = const Color(0xFFFF0000).withOpacity(0.8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6 + borderPulse * 6);
+
+    // BOSS LEVEL label
+    _drawText(canvas, '👾 BOSS LEVEL 👾', Offset(cx, cy - 110), 22,
+        color: Colors.white, bold: true);
+    _drawText(canvas, 'LEVEL ${g.level}', Offset(cx, cy - 75), 16,
+        color: const Color(0xFFFF6666));
+
+    // Countdown number (3, 2, 1)
+    final countNum = (t / 60).ceil().clamp(1, 3); // 3 for t=180-121, 2 for 120-61, 1 for 60-1
+    final frameInCount = t % 60 == 0 ? 60 : t % 60; // 1→60 within each second
+    final scale = 1.0 + (1.0 - frameInCount / 60.0) * 0.8; // big when number appears, shrinks
+    final numOpacity = (frameInCount / 60.0).clamp(0.3, 1.0);
+
+    // Number glow
+    final numStr = '$countNum';
+    _drawTextScaled(canvas, numStr, Offset(cx, cy), 90 * scale,
+        color: const Color(0xFFFFE135).withOpacity(numOpacity),
+        bold: true);
+
+    // x3 SCORE label
+    _drawText(canvas, '✦ SCORE x3 MULTIPLIER ✦', Offset(cx, cy + 80), 14,
+        color: const Color(0xFFFFE135).withOpacity(0.9), bold: true);
+
+    // Warning stripes at bottom
+    _drawText(canvas, '⚠  PREPARE YOURSELF  ⚠', Offset(cx, cy + 110), 13,
+        color: Colors.white.withOpacity(0.8));
+
+    // Progress bar showing time left
+    final progress = t / 180.0;
+    canvas.drawRect(
+      Rect.fromLTWH(W * 0.1, H - 60, W * 0.8, 8),
+      Paint()..color = Colors.white.withOpacity(0.2));
+    canvas.drawRect(
+      Rect.fromLTWH(W * 0.1, H - 60, W * 0.8 * progress, 8),
+      Paint()..color = const Color(0xFFFF3333));
+  }
+
+  void _drawTextScaled(Canvas canvas, String text, Offset center, double fontSize,
+      {Color color = Colors.white, bool bold = false}) {
+    final span = TextSpan(
+      text: text,
+      style: TextStyle(
+        color: color,
+        fontSize: fontSize,
+        fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+        shadows: [
+          Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 12, offset: const Offset(2, 2)),
+          Shadow(color: color.withOpacity(0.5), blurRadius: 20),
+        ],
+      ),
+    );
+    final tp = TextPainter(text: span, textDirection: TextDirection.ltr)..layout();
+    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
   }
 
   void _drawGrid(Canvas canvas, double W, double H) {
@@ -585,6 +680,51 @@ if (b.hiddenPower == PowerupType.flowerpot) {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
+
+    // Gun glow on paddle
+    if (g.puGun) {
+      final gunPulse = sin(g.puGunT * 0.2) * 0.4 + 0.6;
+      // Yellow cannons on left and right
+      final lx = g.padX + 4;
+      final rx = g.padX + g.padW - 10;
+      final cy = g.padY - 6;
+      for (final cx in [lx, rx]) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(Rect.fromLTWH(cx, cy - 8, 6, 10), const Radius.circular(2)),
+          Paint()..color = const Color(0xFFFFDD00));
+        canvas.drawCircle(Offset(cx + 3, cy - 8), 5,
+          Paint()..color = const Color(0xFFFFFF00).withOpacity(0.6 * gunPulse)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+      }
+      // Paddle yellow glow
+      canvas.drawRRect(rect,
+        Paint()
+          ..color = const Color(0xFFFFDD00).withOpacity(0.35 * gunPulse)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3);
+      _drawText(canvas, '🔫', Offset(g.padX + g.padW / 2, g.padY - 18), 13,
+          color: const Color(0xFFFFDD00).withOpacity(gunPulse));
+    }
+
+    // Magnet glow on paddle
+    if (g.puMagnet) {
+      final magnetPulse = sin(g.puMagnetT * 0.15) * 0.4 + 0.6;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(g.padX - 6, g.padY - 6, g.padW + 12, g.padH + 12),
+          const Radius.circular(12)),
+        Paint()
+          ..color = const Color(0xFFFF00FF).withOpacity(0.5 * magnetPulse)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12));
+      canvas.drawRRect(rect,
+        Paint()
+          ..color = const Color(0xFFFF00FF).withOpacity(0.3 * magnetPulse)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3);
+      // Magnet label
+      _drawText(canvas, '🧲', Offset(g.padX + g.padW / 2, g.padY - 16), 13,
+          color: const Color(0xFFFF00FF).withOpacity(magnetPulse));
+    }
   }
 
   void _drawDrop(Canvas canvas, PowerupDrop d) {
@@ -652,6 +792,8 @@ void _drawPowerupStrip(Canvas canvas, GameController g, double W, double stripY)
   (label: '↔',  count: g.countWide,      active: g.puWide,         color: const Color(0xFF00FF88)),
   (label: '⚡', count: g.countLaser,     active: g.puLaser,        color: const Color(0xFFFFE500)),
   (label: '🌸', count: g.countFlowerpot, active: g.flowerpotActive, color: const Color(0xFFFF69B4)),
+  (label: '🧲', count: g.puMagnet ? 1 : 0, active: g.puMagnet,       color: const Color(0xFFFF00FF)),
+  (label: '🔫', count: g.puGun   ? 1 : 0, active: g.puGun,          color: const Color(0xFFFFDD00)),
 ];
 
   final itemW = W / items.length;
@@ -703,6 +845,8 @@ _drawText(
       if (item.label == '✦')  pct = g.puMultiT / puDuration;
       if (item.label == '↔')  pct = g.puWideT  / puDuration;
       if (item.label == '⚡') pct = g.puLaserT / puDuration;
+      if (item.label == '🧲') pct = g.puMagnetT / 300;
+      if (item.label == '🔫') pct = g.puGunT / 600;
 
       canvas.drawRect(
         Rect.fromLTWH(i * itemW + 3, stripY + stripH - 3, (itemW - 6) * pct, 3),

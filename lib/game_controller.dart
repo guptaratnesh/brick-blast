@@ -38,6 +38,18 @@ List<Map<String, dynamic>> flowerpotParticles = [];
 
 // Laser
 List<Map<String, double>> laserRays = [];
+
+// Magnet
+bool puMagnet = false;
+int puMagnetT = 0;
+bool magnetUsedThisLevel = false;
+
+// Gun
+bool puGun = false;
+int puGunT = 0;
+bool gunUsedThisLevel = false;
+int gunFireCooldown = 0;
+List<Map<String, double>> bullets = [];
 double laserSpinAngle = 0.0;
 bool laserUsedThisLevel = false;
 bool fireUsedThisLevel = false;
@@ -56,6 +68,10 @@ bool perfectClear = false; // no lives lost this level
 int lastLevelStars = 0; // stars earned in just-completed level
 bool showStarAnimation = false;
 int starAnimT = 0;
+
+// Boss countdown
+bool bossCountdownActive = false;
+int bossCountdownT = 0; // counts down 180 frames (3 seconds)
 
   // Game objects
   List<Ball> balls = [];
@@ -88,6 +104,8 @@ int starAnimT = 0;
   puFireT = puBigT = puMultiT = puWideT = puLaserT = 0;
   countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; countFlowerpot = 1;
   laserRays.clear();
+  puMagnet = false; puMagnetT = 0; magnetUsedThisLevel = false;
+  puGun = false; puGunT = 0; gunUsedThisLevel = false; gunFireCooldown = 0; bullets.clear();
   livesAtLevelStart = lives;
   levelFrameCount = 0;
   perfectClear = true;
@@ -110,9 +128,12 @@ countFlowerpot = 50;
   perfectClear = true;
   showStarAnimation = false;
   starAnimT = 0;
+  bossCountdownActive = false;
+  bossCountdownT = 0;
   _resetPaddle();
 bricks = makeBricks(screenW: screenW, screenH: screenH, level: level);
 _markCenterBrick();
+  puMagnet = true; puMagnetT = 300; // magnet gift on level start
   balls = [makeBall(screenW: screenW, padY: padY, level: level)];
   state = GameState.playing;
   notifyListeners();
@@ -139,6 +160,18 @@ void togglePause() {
       }
       return;
     }
+
+    // Boss countdown ticking
+    if (bossCountdownActive) {
+      bossCountdownT--;
+      if (bossCountdownT <= 0) {
+        bossCountdownActive = false;
+        state = GameState.playing;
+      }
+      notifyListeners();
+      return;
+    }
+
     if (state != GameState.playing) return;
 
     // Powerup timers
@@ -148,6 +181,67 @@ if (puBig   && --puBigT   <= 0) { puBig   = false; for (var b in balls) { b.r = 
 if (puMulti && --puMultiT <= 0)   puMulti = false;
 if (puWide  && --puWideT  <= 0) { puWide  = false; padW = screenW * 0.28; padX = padX.clamp(0, screenW - padW); }
 if (puLaser && --puLaserT <= 0) { puLaser = false; for (var b in balls) { b.laser = false; b.r = screenW * 0.022; } }
+if (puMagnet && --puMagnetT <= 0) { puMagnet = false; }
+
+// Gun: tick timer and fire bullets from both sides of paddle
+if (puGun) {
+  puGunT--;
+  if (puGunT <= 0) { puGun = false; }
+  if (gunFireCooldown > 0) {
+    gunFireCooldown--;
+  } else {
+    gunFireCooldown = 8; // fire every 8 frames
+    // Left barrel
+    bullets.add({'x': padX + 6, 'y': padY - 6, 'vy': -14.0});
+    // Right barrel
+    bullets.add({'x': padX + padW - 6, 'y': padY - 6, 'vy': -14.0});
+  }
+}
+
+// Move bullets and check brick collisions
+for (final b in bullets) {
+  b['y'] = b['y']! + b['vy']!;
+}
+bullets.removeWhere((b) => b['y']! < 0);
+// Bullet-brick collision
+for (final b in List.from(bullets)) {
+  if (!bullets.contains(b)) continue;
+  for (final br in bricks) {
+    if (!br.alive) continue;
+    if (b['x']! >= br.x && b['x']! <= br.x + br.w &&
+        b['y']! >= br.y && b['y']! <= br.y + br.h) {
+      br.hp--;
+      br.shakeFrames = 4;
+      if (br.hp <= 0) {
+        br.alive = false;
+        combo++;
+        comboTimer = 90;
+        final points = 10 * level + combo * 5;
+        score += points;
+        spawnParticles(particles, br.x + br.w / 2, br.y + br.h / 2, br.color, 8);
+        _addScorePopup(br.x + br.w / 2, br.y + br.h / 2, points, br.color);
+        SoundManager.instance.playBrickDestroy();
+        final brIndex = bricks.indexOf(br);
+        if (brIndex == centerBrickIndex && !whirlgigActive) {
+          _triggerWhirlgig(br.x + br.w / 2, br.y + br.h / 2);
+        }
+      }
+      bullets.remove(b);
+      break;
+    }
+  }
+}
+
+// Magnet: gently pull ball toward paddle center
+if (puMagnet) {
+  final padCx = padX + padW / 2;
+  for (final b in balls) {
+    final dx = padCx - b.x;
+    b.vx += dx * 0.012;
+    // Clamp vx so it doesn't go crazy
+    b.vx = b.vx.clamp(-14.0, 14.0);
+  }
+}
 laserRays.removeWhere((r) => r['life']! <= 0);
 for (var r in laserRays) { r['life'] = r['life']! - 0.05; }
 if (puLaser) laserSpinAngle += 0.05;
@@ -296,6 +390,7 @@ if (b.laser && (puLaserT % 10 == 0)) {
   countWide: wideUsedThisLevel ? 0 : countWide,
   countLaser: laserUsedThisLevel ? 0 : countLaser,
   countFlowerpot: flowerpotUsedThisLevel ? 0 : countFlowerpot,
+  countGun: gunUsedThisLevel ? 0 : 1,
 );
     
     if (drop != null) drops.add(drop);
@@ -487,8 +582,11 @@ void nextLevel() {
   wideUsedThisLevel = false;
   flowerpotUsedThisLevel = false;
   whirlgigUsedThisLevel = false;
+  magnetUsedThisLevel = false;
+  gunUsedThisLevel = false; puGun = false; puGunT = 0; bullets.clear(); gunFireCooldown = 0;
   countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; countFlowerpot = 1;
   laserRays.clear();
+  puMagnet = true; puMagnetT = 300; magnetUsedThisLevel = false; // magnet gift on every level start
   flowerpotActive = false;
   flowerpotT = 0;
   flowerpotParticles.clear();
@@ -503,7 +601,14 @@ void nextLevel() {
   bricks = makeBricks(screenW: screenW, screenH: screenH, level: level);
   _markCenterBrick();
   balls = [makeBall(screenW: screenW, padY: padY, level: level)];
-  state = GameState.playing;
+  // Trigger boss countdown if this is a boss level
+  if (level % 5 == 0) {
+    bossCountdownActive = true;
+    bossCountdownT = 180; // 3 seconds at 60fps
+    state = GameState.paused; // freeze game during countdown
+  } else {
+    state = GameState.playing;
+  }
   notifyListeners();
 }
 
@@ -664,7 +769,17 @@ void _addScorePopup(double x, double y, int points, Color brickColor) {
       SoundManager.instance.playFlowerpot();
     case PowerupType.whirlgig:
   break;
-    
+    case PowerupType.magnet:
+      if (magnetUsedThisLevel) break;
+      magnetUsedThisLevel = true;
+      puMagnet = true;
+      puMagnetT = 300;
+    case PowerupType.gun:
+      if (gunUsedThisLevel) break;
+      gunUsedThisLevel = true;
+      puGun = true;
+      puGunT = 600; // 10 seconds
+      gunFireCooldown = 0;
   }
 }
 }

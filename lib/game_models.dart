@@ -90,7 +90,7 @@ class Particle {
 }
 
 // ── Powerup drop ───────────────────────────────────────────────────────────
-enum PowerupType { fire, big, multi, life, wide, laser, whirlgig, flowerpot }
+enum PowerupType { fire, big, multi, life, wide, laser, whirlgig, flowerpot, magnet, gun }
 class PowerupDrop {
   double x, y;
   final double vy;
@@ -606,6 +606,7 @@ PowerupDrop? trySpawnDrop(double x, double y, double screenW, {
   int countWide = 10,
   int countLaser = 1,
   int countFlowerpot = 50,
+  int countGun = 1,
 }) {
   final rng = Random();
   if (rng.nextDouble() > 0.25) return null;
@@ -627,6 +628,9 @@ PowerupDrop? trySpawnDrop(double x, double y, double screenW, {
   }
   if (countLaser > 0) {
     types.add(PowerupDrop(x: x, y: y, type: PowerupType.laser,     label: '⚡ LASER',  color: const Color(0xFFFFE500), w: screenW * 0.22, h: 28));
+  }
+  if (countGun > 0) {
+    types.add(PowerupDrop(x: x, y: y, type: PowerupType.gun,       label: '🔫 GUN',    color: const Color(0xFFFFDD00), w: screenW * 0.22, h: 28));
   }
   //if (countFlowerpot > 0)
     //types.add(PowerupDrop(x: x, y: y, type: PowerupType.flowerpot, label: '🌸 FLOWER', color: const Color(0xFFFF69B4), w: screenW * 0.22, h: 28));

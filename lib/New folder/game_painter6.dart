@@ -506,7 +506,7 @@ if (g.state == GameState.paused) {
     // ── Star field — 4 layers zooming toward viewer ──
     // Layer 0: distant tiny dim   Layer 1: mid   Layer 2: close bright   Layer 3: sparkle
     final counts  = [100, 55, 22, 8];
-    final speeds  = [0.75, 2.25, 5.5, 2.0]; // all layers at 25% of previous
+    final speeds  = [3.0, 9.0, 22.0, 40.0]; // parallax: distant slow, close fast
     final maxSizes= [0.9, 1.6, 2.8, 4.0];
     final brights = [140, 185, 230, 255];
 
@@ -941,7 +941,7 @@ void _drawPowerupStrip(Canvas canvas, GameController g, double W, double stripY)
   (label: '⚡', count: g.countLaser,     active: g.puLaser,        color: const Color(0xFFFFE500)),
   // (label: '🌸', ...) // flowerpot disabled
   (label: '🧲', count: g.puMagnet ? 1 : 0, active: g.puMagnet,       color: const Color(0xFFFF00FF)),
-  // 🔫 gun removed from strip — always active, no need to show
+  (label: '🔫', count: g.puGun   ? 1 : 0, active: g.puGun,          color: const Color(0xFFFFDD00)),
 ];
 
   final itemW = W / items.length;
@@ -994,7 +994,7 @@ _drawText(
       if (item.label == '↔')  pct = g.puWideT  / puDuration;
       if (item.label == '⚡') pct = g.puLaserT / puDuration;
       if (item.label == '🧲') pct = g.puMagnetT / 300;
-      // gun removed from strip
+      if (item.label == '🔫') pct = g.puGunT / 600;
 
       canvas.drawRect(
         Rect.fromLTWH(i * itemW + 3, stripY + stripH - 3, (itemW - 6) * pct, 3),

@@ -941,7 +941,7 @@ void _drawPowerupStrip(Canvas canvas, GameController g, double W, double stripY)
   (label: '⚡', count: g.countLaser,     active: g.puLaser,        color: const Color(0xFFFFE500)),
   // (label: '🌸', ...) // flowerpot disabled
   (label: '🧲', count: g.puMagnet ? 1 : 0, active: g.puMagnet,       color: const Color(0xFFFF00FF)),
-  // 🔫 gun removed from strip — always active, no need to show
+  (label: '🔫', count: g.puGun   ? 1 : 0, active: g.puGun,          color: const Color(0xFFFFDD00)),
 ];
 
   final itemW = W / items.length;
@@ -994,7 +994,7 @@ _drawText(
       if (item.label == '↔')  pct = g.puWideT  / puDuration;
       if (item.label == '⚡') pct = g.puLaserT / puDuration;
       if (item.label == '🧲') pct = g.puMagnetT / 300;
-      // gun removed from strip
+      if (item.label == '🔫') pct = g.puGunT / 600;
 
       canvas.drawRect(
         Rect.fromLTWH(i * itemW + 3, stripY + stripH - 3, (itemW - 6) * pct, 3),

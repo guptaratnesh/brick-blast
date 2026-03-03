@@ -430,169 +430,230 @@ if (g.state == GameState.paused) {
   void _drawAnimatedBackground(Canvas canvas, double W, double H, double t) {
     final p = Paint();
 
-    // ── Pure deep black base — no gradients, pure void of space ──
-    canvas.drawRect(Rect.fromLTWH(0, 0, W, H),
-        Paint()..color = const Color(0xFF01010A));
+    // ── Deep space base gradient (deep blue → deep purple → near-black) ──
+    final bgShader = const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFF04041A), // top: near-black deep blue
+        Color(0xFF0D0628), // mid: deep indigo
+        Color(0xFF150322), // bottom: deep purple-black
+      ],
+      stops: [0.0, 0.5, 1.0],
+    ).createShader(Rect.fromLTWH(0, 0, W, H));
+    canvas.drawRect(Rect.fromLTWH(0, 0, W, H), Paint()..shader = bgShader);
 
-    // ── Very faint deep blue vignette glow at center (dreamy depth) ──
-    canvas.drawCircle(
-      Offset(W * 0.5, H * 0.42),
-      W * 0.85,
-      Paint()
-        ..color = const Color(0xFF050D2A).withOpacity(0.85)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 80),
-    );
-
-    // ── Milky Way — wide soft diagonal band across screen ──
-    final mwDrift = (t * 6.0) % H; // slow downward drift, wraps around
-
-    // Outer wide glow
+    // ── Milky Way band — diagonal glowing swath ──
+    final mwDrift = sin(t * 0.05) * H * 0.02;
     canvas.drawOval(
-      Rect.fromCenter(
-          center: Offset(W * 0.48, H * 0.40 + mwDrift),
-          width: W * 2.2, height: H * 0.32),
+      Rect.fromCenter(center: Offset(W * 0.5, H * 0.38 + mwDrift), width: W * 1.8, height: H * 0.28),
       Paint()
-        ..color = const Color(0xFF0A0830).withOpacity(0.70)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 60),
+        ..color = const Color(0xFF2A1650).withOpacity(0.55)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 55),
     );
-    // Mid band
     canvas.drawOval(
-      Rect.fromCenter(
-          center: Offset(W * 0.50, H * 0.39 + mwDrift),
-          width: W * 1.6, height: H * 0.13),
+      Rect.fromCenter(center: Offset(W * 0.45, H * 0.36 + mwDrift), width: W * 1.4, height: H * 0.14),
       Paint()
-        ..color = const Color(0xFF1A1050).withOpacity(0.55)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 40),
+        ..color = const Color(0xFF5B2D8A).withOpacity(0.25)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 35),
     );
-    // Bright core streak
+    // Bright core of Milky Way
     canvas.drawOval(
-      Rect.fromCenter(
-          center: Offset(W * 0.50, H * 0.385 + mwDrift),
-          width: W * 0.9, height: H * 0.038),
+      Rect.fromCenter(center: Offset(W * 0.5, H * 0.37 + mwDrift), width: W * 0.7, height: H * 0.055),
       Paint()
-        ..color = const Color(0xFF6655CC).withOpacity(0.22)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
-    );
-    // Faint white dusty core
-    canvas.drawOval(
-      Rect.fromCenter(
-          center: Offset(W * 0.50, H * 0.385 + mwDrift),
-          width: W * 0.5, height: H * 0.018),
-      Paint()
-        ..color = Colors.white.withOpacity(0.07)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+        ..color = const Color(0xFFB896FF).withOpacity(0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
     );
 
-    // ── Deep space nebula patches — very subtle dark blue/indigo ──
+    // ── Nebula color clouds ──
     final nebulae = [
-      (W*0.12, H*0.15, W*0.50, H*0.28, const Color(0xFF050A28), 0.025, 0.018, 0.80),
-      (W*0.85, H*0.22, W*0.45, H*0.24, const Color(0xFF080520), 0.030, 0.022, 0.75),
-      (W*0.55, H*0.68, W*0.60, H*0.30, const Color(0xFF060818), 0.020, 0.030, 0.70),
-      (W*0.20, H*0.78, W*0.44, H*0.22, const Color(0xFF04081E), 0.035, 0.015, 0.72),
+      // (cx, cy, rx, ry, color, speedX, speedY, opacity)
+      (W*0.15, H*0.18, W*0.42, H*0.22, const Color(0xFF1A0A5C), 0.03, 0.02, 0.50),
+      (W*0.82, H*0.30, W*0.38, H*0.20, const Color(0xFF0A1A5C), 0.04, 0.03, 0.45),
+      (W*0.50, H*0.65, W*0.55, H*0.25, const Color(0xFF2E0A4A), 0.02, 0.04, 0.40),
+      (W*0.25, H*0.75, W*0.35, H*0.18, const Color(0xFF003366), 0.05, 0.02, 0.35),
+      (W*0.75, H*0.80, W*0.40, H*0.20, const Color(0xFF1A004D), 0.03, 0.05, 0.38),
     ];
     for (final n in nebulae) {
-      final dx = sin(t * n.$6 + n.$1 * 0.01) * W * 0.02;
-      final dy = cos(t * n.$7 + n.$2 * 0.01) * H * 0.015;
+      final dx = sin(t * n.$6 + n.$1) * W * 0.03;
+      final dy = cos(t * n.$7 + n.$2) * H * 0.025;
       canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(n.$1 + dx, n.$2 + dy),
-            width: n.$3, height: n.$4),
+        Rect.fromCenter(center: Offset(n.$1 + dx, n.$2 + dy), width: n.$3, height: n.$4),
         Paint()
           ..color = n.$5.withOpacity(n.$8)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 55),
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 50),
       );
     }
 
-    // ── Star field — 4 layers zooming toward viewer ──
-    // Layer 0: distant tiny dim   Layer 1: mid   Layer 2: close bright   Layer 3: sparkle
-    final counts  = [100, 55, 22, 8];
-    final speeds  = [0.75, 2.25, 5.5, 2.0]; // all layers at 25% of previous
-    final maxSizes= [0.9, 1.6, 2.8, 4.0];
-    final brights = [140, 185, 230, 255];
+    // ── Sparkling star field — 3 layers (distant, mid, close) ──
+    for (int layer = 0; layer < 3; layer++) {
+      final count  = [80, 40, 15][layer];
+      final speed  = [4.0, 10.0, 22.0][layer];   // zoom speed
+      final maxSz  = [1.2, 2.0, 3.2][layer];
+      final bright = [180, 210, 255][layer];
 
-    for (int layer = 0; layer < 4; layer++) {
-      for (int i = 0; i < counts[layer]; i++) {
-        final seed = i * 2.7183 + layer * 37.1 + 1.4142;
+      for (int i = 0; i < count; i++) {
+        final seed = i * 2.7183 + layer * 31.4 + 1.4142;
         final baseX = ((seed * 73.1) % 1.0) * W;
         final baseY = ((seed * 31.7) % 1.0) * H;
-        final sz    = maxSizes[layer] * (0.45 + ((seed * 53.9) % 1.0) * 0.55);
-        final tPhase = (seed * 11.1) % 6.2832;
+        final sz    = maxSz * (0.4 + ((seed * 53.9) % 1.0) * 0.6);
+        final twinklePhase = (seed * 11.1) % 6.28;
 
-        // Drift downward — camera flying through space toward bottom
-        final drift = (t * speeds[layer] * 10.0) % H;
-        final x = baseX;
-        final y = (baseY + drift) % H;
+        // Zoom toward viewer — stars drift outward from center
+        final zoomT = (t * speed * 0.004) % 1.0;
+        final fromCx = baseX - W / 2;
+        final fromCy = baseY - H / 2;
+        final x = W / 2 + fromCx * (1 + zoomT * 0.4);
+        final y = H / 2 + fromCy * (1 + zoomT * 0.4);
+        if (x < 0 || x > W || y < 0 || y > H) continue;
 
-        // Twinkle
-        final twinkle = sin(t * 1.6 + tPhase) * 0.30 + 0.70;
-        final alpha   = (twinkle * brights[layer]).toInt().clamp(0, 255);
+        final twinkle = sin(t * 1.8 + twinklePhase) * 0.35 + 0.65;
+        final alpha = (twinkle * bright).toInt().clamp(0, 255);
 
-        // Color palette: mostly blue-white, some pure white, rare warm
-        final tint = i % 7;
+        final tint = i % 6;
         final Color sc;
-        if      (tint == 0) sc = Color.fromARGB(alpha, 140, 185, 255); // blue-white
-        else if (tint == 1) sc = Color.fromARGB(alpha, 180, 210, 255); // soft blue
-        else if (tint == 2) sc = Color.fromARGB((alpha * 0.7).toInt(), 220, 200, 255); // faint violet
-        else                sc = Color.fromARGB(alpha, 235, 240, 255); // near white
+        if      (tint == 0) sc = Color.fromARGB(alpha, 160, 200, 255); // blue-white
+        else if (tint == 1) sc = Color.fromARGB(alpha, 255, 210, 180); // warm gold
+        else if (tint == 2) sc = Color.fromARGB(alpha, 200, 160, 255); // violet
+        else                sc = Color.fromARGB(alpha, 230, 230, 255); // pure white
 
-        p..color = sc..strokeWidth = 0.8;
+        p.color = sc;
         canvas.drawCircle(Offset(x, y), sz, p);
 
-        // Sparkle cross on close/sparkle stars
-        if (layer >= 2) {
-          final sAlpha = (alpha * 0.45).toInt().clamp(0, 255);
-          p.color = Color.fromARGB(sAlpha, 200, 220, 255);
-          final arm = sz * (layer == 3 ? 3.5 : 2.2);
-          canvas.drawLine(Offset(x - arm, y), Offset(x + arm, y), p..strokeWidth = 0.7);
-          canvas.drawLine(Offset(x, y - arm), Offset(x, y + arm), p..strokeWidth = 0.7);
-          // Diagonal sparkle for layer 3
-          if (layer == 3) {
-            final dArm = arm * 0.6;
-            canvas.drawLine(Offset(x-dArm, y-dArm), Offset(x+dArm, y+dArm), p..strokeWidth = 0.5);
-            canvas.drawLine(Offset(x+dArm, y-dArm), Offset(x-dArm, y+dArm), p..strokeWidth = 0.5);
-          }
+        // Close stars get a cross-sparkle
+        if (layer == 2) {
+          p.color = sc.withOpacity(0.5);
+          canvas.drawLine(Offset(x - sz*2.5, y), Offset(x + sz*2.5, y), p..strokeWidth = 0.8);
+          canvas.drawLine(Offset(x, y - sz*2.5), Offset(x, y + sz*2.5), p..strokeWidth = 0.8);
         }
       }
     }
 
-    // ── Shooting stars — 2 different paths cycling ──
-    // Shot 1 — every 9 sec
-    final s1 = t % 9.0;
-    if (s1 < 1.2) {
-      _drawShootingStar(canvas, s1 / 1.2,
-          W * 0.05, H * 0.06, W * 0.62, H * 0.38);
-    }
-    // Shot 2 — every 13 sec (offset by 5s)
-    final s2 = (t + 5.0) % 13.0;
-    if (s2 < 0.9) {
-      _drawShootingStar(canvas, s2 / 0.9,
-          W * 0.90, H * 0.10, W * 0.30, H * 0.50);
-    }
-  }
+    // ── Floating planets ──
+    // Each entry: (cx, cy, radius, color1, color2, orbitR, orbitSpeed)
+    final planets = [
+      (W*0.78, H*0.15, 22.0, const Color(0xFF7B3FBF), const Color(0xFF3A1A7A), W*0.015, 0.12),
+      (W*0.18, H*0.32, 14.0, const Color(0xFF1A6BB5), const Color(0xFF0D3A6B), W*0.012, 0.09),
+      (W*0.88, H*0.55, 32.0, const Color(0xFF9C5500), const Color(0xFF5C2D00), W*0.018, 0.07),
+      (W*0.10, H*0.72, 18.0, const Color(0xFF2A8A4A), const Color(0xFF0A4A20), W*0.010, 0.14),
+      (W*0.65, H*0.82, 11.0, const Color(0xFFAA4466), const Color(0xFF661A33), W*0.008, 0.18),
+    ];
+    // Which planet index has a ring
+    const ringPlanetIndex = 2;
 
-  void _drawShootingStar(Canvas canvas, double prog,
-      double x1, double y1, double x2, double y2) {
-    final cx = x1 + (x2 - x1) * prog;
-    final cy = y1 + (y2 - y1) * prog;
-    final tx = x1 + (x2 - x1) * (prog - 0.22).clamp(0, 1);
-    final ty = y1 + (y2 - y1) * (prog - 0.22).clamp(0, 1);
-    final op = prog < 0.10 ? prog / 0.10
-             : prog > 0.80 ? (1 - prog) / 0.20
-             : 1.0;
-    // Outer glow tail
-    canvas.drawLine(Offset(tx, ty), Offset(cx, cy),
+    for (int pi = 0; pi < planets.length; pi++) {
+      final pl = planets[pi];
+      final orbitSpeed = pl.$7;
+      final orbitR     = pl.$6;
+      final ox = sin(t * orbitSpeed) * orbitR;
+      final oy = cos(t * orbitSpeed * 0.7) * orbitR * 0.5;
+      final px = pl.$1 + ox;
+      final py = pl.$2 + oy;
+      final r  = pl.$3;
+
+      // Planet glow aura
+      canvas.drawCircle(Offset(px, py), r * 1.7,
+        Paint()
+          ..color = pl.$4.withOpacity(0.20)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14));
+
+      // Planet body gradient
+      final planetShader = RadialGradient(
+        center: const Alignment(-0.35, -0.35),
+        colors: [pl.$4.withOpacity(1.0), pl.$5],
+        stops: const [0.0, 1.0],
+      ).createShader(Rect.fromCircle(center: Offset(px, py), radius: r));
+      canvas.drawCircle(Offset(px, py), r, Paint()..shader = planetShader);
+
+      // Atmosphere rim
+      canvas.drawCircle(Offset(px, py), r,
+        Paint()
+          ..color = Colors.white.withOpacity(0.12)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = r * 0.18);
+
+      // Ring (Saturn-like) for designated planet
+      if (pi == ringPlanetIndex) {
+        canvas.save();
+        canvas.translate(px, py);
+        canvas.scale(1.0, 0.28);
+        canvas.drawCircle(Offset.zero, r * 1.75,
+          Paint()
+            ..color = const Color(0xFFD4A855).withOpacity(0.35)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = r * 0.55);
+        canvas.restore();
+      }
+
+      // Surface highlight
+      canvas.drawCircle(Offset(px - r*0.3, py - r*0.3), r * 0.25,
+        Paint()..color = Colors.white.withOpacity(0.18));
+    }
+
+    // ── Reflective neon road at bottom ──
+    final roadY = H * 0.88;
+    // Road gradient — glowing neon surface
+    final roadShader = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        const Color(0xFF6600FF).withOpacity(0.0),
+        const Color(0xFF6600FF).withOpacity(0.22),
+        const Color(0xFF00CCFF).withOpacity(0.28),
+      ],
+    ).createShader(Rect.fromLTWH(0, roadY, W, H - roadY));
+    canvas.drawRect(Rect.fromLTWH(0, roadY, W, H - roadY), Paint()..shader = roadShader);
+
+    // Neon horizon line
+    canvas.drawLine(
+      Offset(0, roadY),
+      Offset(W, roadY),
       Paint()
-        ..color = const Color(0xFF4466FF).withOpacity(op * 0.40)
-        ..strokeWidth = 4.0
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
-    // White core tail
-    canvas.drawLine(Offset(tx, ty), Offset(cx, cy),
-      Paint()
-        ..color = Colors.white.withOpacity(op * 0.95)
-        ..strokeWidth = 1.1);
-    // Head dot
-    canvas.drawCircle(Offset(cx, cy), 2.5,
-        Paint()..color = Colors.white.withOpacity(op));
+        ..color = const Color(0xFF00CCFF).withOpacity(0.6)
+        ..strokeWidth = 1.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+
+    // Road grid lines converging to vanishing point
+    final vp = Offset(W / 2, roadY); // vanishing point
+    for (int i = 0; i < 7; i++) {
+      final spread = (i - 3) * W * 0.18;
+      final roadLinePhase = (t * 0.3 + i * 0.15) % 1.0;
+      final alpha = (0.12 + roadLinePhase * 0.2).clamp(0.0, 0.35);
+      canvas.drawLine(
+        Offset(vp.dx + spread * 0.08, roadY + 2),
+        Offset(vp.dx + spread, H),
+        Paint()
+          ..color = const Color(0xFF8844FF).withOpacity(alpha)
+          ..strokeWidth = 0.8,
+      );
+    }
+
+    // ── Shooting star every ~10 seconds ──
+    final sCycle = t % 10.0;
+    if (sCycle < 1.4) {
+      final prog = sCycle / 1.4;
+      final sx1 = W * 0.05;  final sy1 = H * 0.08;
+      final sx2 = W * 0.65;  final sy2 = H * 0.42;
+      final cx2 = sx1 + (sx2 - sx1) * prog;
+      final cy2 = sy1 + (sy2 - sy1) * prog;
+      final tx  = sx1 + (sx2 - sx1) * (prog - 0.2).clamp(0, 1);
+      final ty  = sy1 + (sy2 - sy1) * (prog - 0.2).clamp(0, 1);
+      final sOp = prog < 0.12 ? prog/0.12 : prog > 0.78 ? (1-prog)/0.22 : 1.0;
+      // Glow tail
+      canvas.drawLine(Offset(tx, ty), Offset(cx2, cy2),
+        Paint()
+          ..color = const Color(0xFF88AAFF).withOpacity(sOp * 0.5)
+          ..strokeWidth = 3.5
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+      // Core
+      canvas.drawLine(Offset(tx, ty), Offset(cx2, cy2),
+        Paint()
+          ..color = Colors.white.withOpacity(sOp)
+          ..strokeWidth = 1.2);
+      canvas.drawCircle(Offset(cx2, cy2), 2.8,
+          Paint()..color = Colors.white.withOpacity(sOp));
+    }
   }
 
   void _drawGrid(Canvas canvas, double W, double H) {
@@ -941,7 +1002,7 @@ void _drawPowerupStrip(Canvas canvas, GameController g, double W, double stripY)
   (label: '⚡', count: g.countLaser,     active: g.puLaser,        color: const Color(0xFFFFE500)),
   // (label: '🌸', ...) // flowerpot disabled
   (label: '🧲', count: g.puMagnet ? 1 : 0, active: g.puMagnet,       color: const Color(0xFFFF00FF)),
-  // 🔫 gun removed from strip — always active, no need to show
+  (label: '🔫', count: g.puGun   ? 1 : 0, active: g.puGun,          color: const Color(0xFFFFDD00)),
 ];
 
   final itemW = W / items.length;
@@ -994,7 +1055,7 @@ _drawText(
       if (item.label == '↔')  pct = g.puWideT  / puDuration;
       if (item.label == '⚡') pct = g.puLaserT / puDuration;
       if (item.label == '🧲') pct = g.puMagnetT / 300;
-      // gun removed from strip
+      if (item.label == '🔫') pct = g.puGunT / 600;
 
       canvas.drawRect(
         Rect.fromLTWH(i * itemW + 3, stripY + stripH - 3, (itemW - 6) * pct, 3),

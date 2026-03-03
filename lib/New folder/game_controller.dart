@@ -115,7 +115,7 @@ int bossCountdownT = 0; // counts down 180 frames (3 seconds)
   countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; /* countFlowerpot disabled */
   laserRays.clear();
   puMagnet = false; puMagnetT = 0; magnetUsedThisLevel = false;
-  puGun = true; puGunT = -1; gunUsedThisLevel = true; gunFireCooldown = 0; bullets.clear(); isTouching = false; // gun always active
+  puGun = false; puGunT = 0; gunUsedThisLevel = false; gunFireCooldown = 0; bullets.clear(); isTouching = false;
   livesAtLevelStart = lives;
   levelFrameCount = 0;
   perfectClear = true;
@@ -201,7 +201,8 @@ if (puMagnet && --puMagnetT <= 0) { puMagnet = false; }
 
 // Gun: tick timer and fire bullets from both sides of paddle
 if (puGun) {
-  if (puGunT > 0) puGunT--; // -1 means infinite, never expires
+  puGunT--;
+  if (puGunT <= 0) { puGun = false; }
   if (isTouching) { // only fire while finger is on screen
     if (gunFireCooldown > 0) {
       gunFireCooldown--;
@@ -565,7 +566,7 @@ void nextLevel() {
   flowerpotUsedThisLevel = false;
   whirlgigUsedThisLevel = false;
   magnetUsedThisLevel = false;
-  gunUsedThisLevel = true; puGun = true; puGunT = -1; bullets.clear(); gunFireCooldown = 0; // gun always active
+  gunUsedThisLevel = false; puGun = false; puGunT = 0; bullets.clear(); gunFireCooldown = 0;
   countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; countFlowerpot = 1;
   laserRays.clear();
   puMagnet = true; puMagnetT = 300; magnetUsedThisLevel = false; // magnet gift on every level start

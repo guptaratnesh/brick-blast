@@ -101,16 +101,12 @@ void initState() {
             onTapDown: (d) => _handleTap(d.localPosition),
 
             // Drag to move paddle — horizontal pan anywhere on screen
-            onHorizontalDragStart: (d) { _game.isTouching = true; _handleDrag(d.localPosition); },
+            onHorizontalDragStart: (d) => _handleDrag(d.localPosition),
             onHorizontalDragUpdate: (d) => _handleDrag(d.localPosition),
-            onHorizontalDragEnd: (d) => _game.isTouching = false,
-            onHorizontalDragCancel: () => _game.isTouching = false,
 
             // Also handle vertical drag start so it doesn't get ignored
-            onPanStart: (d) { _game.isTouching = true; _handleDrag(d.localPosition); },
+            onPanStart: (d) => _handleDrag(d.localPosition),
             onPanUpdate: (d) => _handleDrag(d.localPosition),
-            onPanEnd: (d) => _game.isTouching = false,
-            onPanCancel: () => _game.isTouching = false,
 
             child: AnimatedBuilder(
   animation: _game,

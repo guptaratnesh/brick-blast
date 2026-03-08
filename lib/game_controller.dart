@@ -6,7 +6,6 @@ import 'sound_manager.dart';
 enum GameState { menu, playing, paused, dead, clear }
 
 class GameController extends ChangeNotifier {
-  // Screen dimensions (set on first layout)
   double screenW = 0;
   double screenH = 0;
 
@@ -18,85 +17,63 @@ class GameController extends ChangeNotifier {
   int combo = 0;
   int comboTimer = 0;
 
-  // Powerup state
- // Powerup state
-bool puFire = false, puBig = false, puMulti = false, puWide = false, puLaser = false;
-int puFireT = 0, puBigT = 0, puMultiT = 0, puWideT = 0, puLaserT = 0;
+  // Active bullet type
+  BulletType activeBulletType = BulletType.normal;
+  int normalBullets = 200;        // single shared bullet pool
+  int lifeFlashTimer = 0;         // frames to flash screen when life lost
+  bool gameOverByBullets = false; // true if game ended due to bullet exhaustion
 
-// Powerup counts (10 each, shared across all levels)
-int countFire = 1, countBig = 1, countMulti = 1, countWide = 1, countLaser = 1, countFlowerpot = 1;
-int centerBrickIndex = -1; // tracks which brick is the center one
-bool whirlgigActive = false;
-int whirlgigT = 0;
-double whirlgigX = 0, whirlgigY = 0;
-List<Map<String, dynamic>> whirlgigParticles = [];
 
-// Flowerpot — DISABLED
-// bool flowerpotActive = false;
-// int flowerpotT = 0;
-// List<Map<String, dynamic>> flowerpotParticles = [];
-bool flowerpotActive = false;
-int flowerpotT = 0;
-List<Map<String, dynamic>> flowerpotParticles = []; // kept for compile compat
 
-// Laser
-List<Map<String, double>> laserRays = [];
+  // Wide paddle powerup
+  bool puWide = false;
+  int puWideT = 0;
 
-// Magnet
-bool puMagnet = false;
-int puMagnetT = 0;
-bool magnetUsedThisLevel = false;
+  // Brick descent
+  double brickDescentY = 0.0; // cumulative Y offset added to all bricks
+  double brickDescentSpeed = 0.36; // pixels per frame — 2x speed
 
-// Gun
-bool puGun = false;
-int puGunT = 0;
-bool isTouching = false; // true while finger is on screen
-bool gunUsedThisLevel = false;
-int gunFireCooldown = 0;
-List<Map<String, double>> bullets = [];
-double laserSpinAngle = 0.0;
-bool laserUsedThisLevel = false;
-bool fireUsedThisLevel = false;
-bool bigUsedThisLevel = false;
-bool multiUsedThisLevel = false;
-bool wideUsedThisLevel = false;
-bool flowerpotUsedThisLevel = false; // flowerpot disabled
-bool whirlgigUsedThisLevel = false;
+  // Firing
+  bool isTouching = false;
+  int gunFireCooldown = 0;
+  List<Bullet> bullets = [];
 
-// 3-Star system
-Map<int, int> levelStars = {};
+  // Laser pierce visuals
+  List<Map<String, double>> laserRays = [];
 
-// Feature vars
-int lastLifePulseT = 0;       // counts up while lives == 1, drives red pulse
-bool luckySaveActive = false; // near miss detected
-int luckyT = 0;               // countdown for LUCKY! display
-int paddleSkin = 0;           // 0=neon, 1=fire, 2=ice, 3=gold // level -> best stars earned (1-3)
-int livesAtLevelStart = 10;
-int levelStartFrame = 0;
-int levelFrameCount = 0;
-bool perfectClear = false; // no lives lost this level
-int lastLevelStars = 0; // stars earned in just-completed level
-bool showStarAnimation = false;
-int starAnimT = 0;
+  // Score popups
+  List<Map<String, dynamic>> scorePopups = [];
 
-// Boss countdown
-bool bossCountdownActive = false;
-int bossCountdownT = 0; // counts down 180 frames (3 seconds)
+  // Stars / level tracking
+  Map<int, int> levelStars = {};
+  int livesAtLevelStart = 3;
+  int levelFrameCount = 0;
+  bool perfectClear = false;
+  int lastLevelStars = 0;
+  bool showStarAnimation = false;
+  int starAnimT = 0;
+
+  // Boss countdown
+  bool bossCountdownActive = false;
+  int bossCountdownT = 0;
 
   // Game objects
-  List<Ball> balls = [];
   List<Brick> bricks = [];
   List<Particle> particles = [];
-  List<Map<String, dynamic>> scorePopups = [];
   List<PowerupDrop> drops = [];
+  // Drop caps per level — max 4 of each type per level
+  Map<PowerupType, int> levelDropCount = {
+    PowerupType.fire: 0, PowerupType.laser: 0,
+    PowerupType.whirlgig: 0, PowerupType.wide: 0,
+  };
 
   // Paddle
   double padX = 0, padY = 0, padW = 0;
   final double padH = 14;
+  int paddleSkin = 0;
 
   void init(double w, double h) {
-    screenW = w;
-    screenH = h;
+    screenW = w; screenH = h;
     _resetPaddle();
     bricks = makeBricks(screenW: w, screenH: h, level: 1);
   }
@@ -108,344 +85,188 @@ int bossCountdownT = 0; // counts down 180 frames (3 seconds)
   }
 
   void startGame() {
-  score = 0; lives = 10; level = 1;
-  combo = 0; comboTimer = 0;
-  puFire = puBig = puMulti = puWide = puLaser = false;
-  puFireT = puBigT = puMultiT = puWideT = puLaserT = 0;
-  countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; /* countFlowerpot disabled */
-  laserRays.clear();
-  puMagnet = false; puMagnetT = 0; magnetUsedThisLevel = false;
-  puGun = true; puGunT = -1; gunUsedThisLevel = true; gunFireCooldown = 0; bullets.clear(); isTouching = false; // gun always active
-  livesAtLevelStart = lives;
-  levelFrameCount = 0;
-  perfectClear = true;
-  showStarAnimation = false;
-  starAnimT = 0; laserSpinAngle = 0.0;
-  lastLifePulseT = 0; luckySaveActive = false; luckyT = 0;
-laserUsedThisLevel = false;
-fireUsedThisLevel = false;
-bigUsedThisLevel = false;
-multiUsedThisLevel = false;
-wideUsedThisLevel = false;
-// flowerpotUsedThisLevel = false; // flowerpot disabled
-whirlgigUsedThisLevel = false;
-whirlgigActive = false; whirlgigT = 0; whirlgigParticles.clear();
-flowerpotActive = false; flowerpotT = 0; flowerpotParticles.clear();
-// countFlowerpot = 50; // flowerpot disabled
-  particles.clear(); drops.clear(); scorePopups.clear();
-  levelStars.clear();
-  livesAtLevelStart = 10;
-  levelFrameCount = 0;
-  perfectClear = true;
-  showStarAnimation = false;
-  starAnimT = 0;
-  bossCountdownActive = false;
-  bossCountdownT = 0;
-  _resetPaddle();
-bricks = makeBricks(screenW: screenW, screenH: screenH, level: level);
-_markCenterBrick();
-  puMagnet = true; puMagnetT = 300; // magnet gift on level start
-  balls = [makeBall(screenW: screenW, padY: padY, level: level)];
-  state = GameState.playing;
-  notifyListeners();
-}
+    score = 0; lives = 3; level = 1;
+    combo = 0; comboTimer = 0;
+    activeBulletType = BulletType.normal;
+    normalBullets = 200;
+    lifeFlashTimer = 0;
+    gameOverByBullets = false;
+    puWide = false; puWideT = 0;
+    brickDescentY = 0.0;
+    gunFireCooldown = 0;
+    isTouching = false;
+    bullets.clear();
+    laserRays.clear();
+    particles.clear();
+    drops.clear();
+    scorePopups.clear();
+    levelStars.clear();
+    livesAtLevelStart = 3;
+    levelFrameCount = 0;
+    perfectClear = true;
+    showStarAnimation = false;
+    starAnimT = 0;
+    bossCountdownActive = false;
+    bossCountdownT = 0;
+    _resetPaddle();
+    bricks = makeBricks(screenW: screenW, screenH: screenH, level: level);
+    state = GameState.playing;
+    notifyListeners();
+  }
+
+  void selectBulletType(BulletType type) {
+    // Strip tap: only allow if type is unlocked for current level
+    bool unlocked = type == BulletType.normal
+        || (type == BulletType.fire     && level >= 5)
+        || (type == BulletType.laser    && level >= 10)
+        || (type == BulletType.whirlgig && level >= 25);
+    if (unlocked && normalBullets > 0) {
+      activeBulletType = type;
+      notifyListeners();
+    }
+  }
 
   void movePaddle(double x) {
     padX = (x - padW / 2).clamp(0, screenW - padW);
   }
 
-void cyclePaddleSkin() {
-  paddleSkin = (paddleSkin + 1) % 4;
-  notifyListeners();
-}
-
-void togglePause() {
-  if (state == GameState.playing) {
-    state = GameState.paused;
-  } else if (state == GameState.paused) {
-    state = GameState.playing;
+  void cyclePaddleSkin() {
+    paddleSkin = (paddleSkin + 1) % 4;
+    notifyListeners();
   }
-  notifyListeners();
-}
+
+  void togglePause() {
+    if (state == GameState.playing) {
+      state = GameState.paused;
+    } else if (state == GameState.paused) state = GameState.playing;
+    notifyListeners();
+  }
+
   void update() {
-    // Tick star animation even during clear screen
     if (state == GameState.clear) {
-      if (starAnimT > 1) {
-        starAnimT--;
-        notifyListeners();
-      }
+      if (starAnimT > 1) { starAnimT--; notifyListeners(); }
       return;
     }
-
-    // Boss countdown ticking
     if (bossCountdownActive) {
       bossCountdownT--;
-      if (bossCountdownT <= 0) {
-        bossCountdownActive = false;
-        state = GameState.playing;
-      }
+      if (bossCountdownT <= 0) { bossCountdownActive = false; state = GameState.playing; }
       notifyListeners();
       return;
     }
-
     if (state != GameState.playing) return;
 
     // Powerup timers
-// Powerup timers
-if (puFire  && --puFireT  <= 0) { puFire  = false; for (var b in balls) { b.fire = false; } }
-if (puBig   && --puBigT   <= 0) { puBig   = false; for (var b in balls) { b.r = screenW * 0.022; } }
-if (puMulti && --puMultiT <= 0)   puMulti = false;
-if (puWide  && --puWideT  <= 0) { puWide  = false; padW = screenW * 0.28; padX = padX.clamp(0, screenW - padW); }
-if (puLaser && --puLaserT <= 0) { puLaser = false; for (var b in balls) { b.laser = false; b.r = screenW * 0.022; } }
-if (puMagnet && --puMagnetT <= 0) { puMagnet = false; }
+    // No bullets left — force back to normal
+    if (normalBullets <= 0 && activeBulletType != BulletType.normal) {
+      activeBulletType = BulletType.normal;
+    }
+    if (puWide && --puWideT <= 0) {
+      puWide = false;
+      padW = min(screenW * 0.28, 120);
+      padX = padX.clamp(0, screenW - padW);
+    }
 
-// Gun: tick timer and fire bullets from both sides of paddle
-if (puGun) {
-  if (puGunT > 0) puGunT--; // -1 means infinite, never expires
-  if (isTouching) { // only fire while finger is on screen
-    if (gunFireCooldown > 0) {
-      gunFireCooldown--;
+    // ── Firing ──────────────────────────────────────────────────────────────
+    if (isTouching) {
+      if (gunFireCooldown > 0) {
+        gunFireCooldown--;
+      } else {
+        gunFireCooldown = 8;
+        _spawnBullets();
+      }
     } else {
-      gunFireCooldown = 8; // fire every 8 frames
-      if (bullets.length < 12) { // cap at 12 bullets on screen
-        bullets.add({'x': padX + 6, 'y': padY - 6, 'vy': -14.0});
-        bullets.add({'x': padX + padW - 6, 'y': padY - 6, 'vy': -14.0});
-      }
+      gunFireCooldown = 0;
     }
-  } else {
-    gunFireCooldown = 0; // reset so fires immediately on next touch
-  }
-}
 
-// Move bullets and check brick collisions
-for (final b in bullets) {
-  b['y'] = b['y']! + b['vy']!;
-}
-bullets.removeWhere((b) => b['y']! < 0);
-// Bullet-brick collision
-for (final b in List.from(bullets)) {
-  if (!bullets.contains(b)) continue;
-  for (final br in bricks) {
-    if (!br.alive) continue;
-    if (b['x']! >= br.x && b['x']! <= br.x + br.w &&
-        b['y']! >= br.y && b['y']! <= br.y + br.h) {
-      br.hp--;
-      br.shakeFrames = 4;
-      if (br.hp <= 0) {
-        br.alive = false;
-        combo++;
-        comboTimer = 90;
-        final points = 10 * level + combo * 5;
-        score += points;
-        spawnParticles(particles, br.x + br.w / 2, br.y + br.h / 2, br.color, 8);
-        _addScorePopup(br.x + br.w / 2, br.y + br.h / 2, points, br.color);
-        SoundManager.instance.playBrickDestroy();
-        final brIndex = bricks.indexOf(br);
-        if (brIndex == centerBrickIndex && !whirlgigActive) {
-          _triggerWhirlgig(br.x + br.w / 2, br.y + br.h / 2);
-        }
-      }
-      bullets.remove(b);
-      break;
-    }
-  }
-}
+    // ── Move bullets ────────────────────────────────────────────────────────
+    for (final b in bullets) { b.x += b.vx; b.y += b.vy; }
+    bullets.removeWhere((b) => b.y < 0 || b.x < 0 || b.x > screenW);
 
-// Magnet: gently pull ball toward paddle center
-if (puMagnet) {
-  final padCx = padX + padW / 2;
-  for (final b in balls) {
-    final dx = padCx - b.x;
-    b.vx += dx * 0.012;
-    // Clamp vx so it doesn't go crazy
-    b.vx = b.vx.clamp(-14.0, 14.0);
-  }
-}
-laserRays.removeWhere((r) => r['life']! <= 0);
-for (var r in laserRays) { r['life'] = r['life']! - 0.05; }
-if (puLaser) laserSpinAngle += 0.05;
-
-    // Update balls
-    final toRemove = <Ball>[];
-    for (final b in balls) {
-      b.update();
-
-      // Wall bounces
-      if (b.x - b.r < 0)        { b.x = b.r;           b.vx =  b.vx.abs(); }
-      if (b.x + b.r > screenW)  { b.x = screenW - b.r; b.vx = -b.vx.abs(); }
-      if (b.y - b.r < 0)        { b.y = b.r;            b.vy =  b.vy.abs(); }
-
-      // Paddle collision
-      if (b.vy > 0 &&
-          b.x + b.r > padX && b.x - b.r < padX + padW &&
-          b.y + b.r > padY && b.y - b.r < padY + padH) {
-        b.vy = -b.vy.abs();
-        final hit = (b.x - padX) / padW;
-        // Near miss detection — hit within 10% of either edge
-        if (hit < 0.12 || hit > 0.88) {
-          luckySaveActive = true;
-          luckyT = 90; // show for 1.5 seconds
-        }
-        b.vx = (hit - 0.5) * 12;
-        final spd = sqrt(b.vx * b.vx + b.vy * b.vy);
-        final target = 6.0 + level * 0.4;
-        b.vx = b.vx / spd * target;
-        b.vy = b.vy / spd * target;
-        spawnParticles(particles, b.x, padY, const Color(0xFF00FFFF), 6);
-        SoundManager.instance.playPaddleHit();
-        // Random chance to trigger flowerpot on paddle hit
-
-      }
-
-// Laser ray collision — optimized, only fires every 10 frames
-// Laser ray collision — 8 rays from screen center
-if (b.laser && (puLaserT % 10 == 0)) {
-  const rayCount = 8;
-  final cx = screenW / 2;
-  final cy = screenH / 2;
-  int bricksHitThisFrame = 0;
-  for (int i = 0; i < rayCount; i++) {
-    if (bricksHitThisFrame >= 4) break;
-    final angle = laserSpinAngle + (i / rayCount) * 3.14159 * 2;
-    final dx = cos(angle);
-    final dy = sin(angle);
-    bool hitBrick = false;
-    for (double dist = 20; dist < 900; dist += 25) {
-      if (hitBrick) break;
-      final rx = cx + dx * dist;
-      final ry = cy + dy * dist;
-      if (rx < 0 || rx > screenW || ry < 0 || ry > screenH) break;
+    // ── Bullet-brick collision ───────────────────────────────────────────────
+    final toRemoveBullets = <Bullet>{};
+    for (final b in List<Bullet>.from(bullets)) {
+      if (toRemoveBullets.contains(b)) continue;
+      bool hitAny = false;
       for (final br in bricks) {
         if (!br.alive) continue;
-        if (rx >= br.x && rx <= br.x + br.w &&
-            ry >= br.y && ry <= br.y + br.h) {
-          br.hp--;
-          br.shakeFrames = 5;
-          if (laserRays.length < 15) {
-            laserRays.add({'x1': cx, 'y1': cy, 'x2': br.x + br.w / 2, 'y2': br.y + br.h / 2, 'life': 1.0});
+        final bry = br.y + brickDescentY;
+        if (b.x < br.x || b.x > br.x + br.w) continue;
+        if (b.y < bry || b.y > bry + br.h) continue;
+
+        // Hit!
+        // Shield: absorb first hit completely
+        if (br.brickType == BrickType.shield && br.shieldActive) {
+          br.shieldActive = false;
+          br.color = const Color(0xFF556677); // dulled — shield broken
+          br.shakeFrames = 6;
+          spawnShieldBreak(particles, br.x + br.w / 2, br.y + brickDescentY + br.h / 2);
+          if (b.type != BulletType.laser) { toRemoveBullets.add(b); hitAny = true; break; }
+          continue;
+        }
+        final dmg = (b.type == BulletType.fire) ? 2 : 1;
+        br.hp -= dmg;
+        br.shakeFrames = 4;
+        if (br.hp <= 0) _destroyBrick(br, b.type);
+
+        if (b.type == BulletType.laser) {
+          // Laser: pierce — keep going, add visual ray
+          if (laserRays.length < 20) {
+            laserRays.add({'x1': b.x, 'y1': b.y + 20, 'x2': b.x, 'y2': bry, 'life': 1.0});
           }
-          if (br.hp <= 0) {
-            br.alive = false;
-            combo++;
-            comboTimer = 90;
-            final points = 10 * level + combo * 5;
-            score += points;
-            spawnParticles(particles, br.x + br.w / 2, br.y + br.h / 2, br.color, 8);
-            _addScorePopup(br.x + br.w / 2, br.y + br.h / 2, points, br.color);
-          }
-          bricksHitThisFrame++;
-          hitBrick = true;
+          // Don't remove bullet — it keeps going through
+        } else if (b.type == BulletType.whirlgig) {
+          // Whirlgig: split into 3 on first impact
+          toRemoveBullets.add(b);
+          _spawnWhirlgigSplit(b.x, b.y);
+          hitAny = true;
+          break;
+        } else {
+          toRemoveBullets.add(b);
+          hitAny = true;
           break;
         }
       }
     }
-  }
-}
+    bullets.removeWhere((b) => toRemoveBullets.contains(b));
 
+    // ── Laser ray fade ───────────────────────────────────────────────────────
+    for (var r in laserRays) { r['life'] = r['life']! - 0.08; }
+    laserRays.removeWhere((r) => r['life']! <= 0);
 
-
-      // Brick collisions
-      for (final br in bricks) {
-        if (!br.alive) continue;
-        if (b.x + b.r < br.x || b.x - b.r > br.x + br.w) continue;
-        if (b.y + b.r < br.y || b.y - b.r > br.y + br.h) continue;
-
-        if (!b.fire) {
-          final oL = (b.x + b.r) - br.x;
-          final oR = (br.x + br.w) - (b.x - b.r);
-          final oT = (b.y + b.r) - br.y;
-          final oB = (br.y + br.h) - (b.y - b.r);
-          if (min(oL, oR) < min(oT, oB)) {
-            b.vx = -b.vx;
-          } else {
-            b.vy = -b.vy;
-          }
-        }
-
-        br.hp--;
-        br.shakeFrames = 5;
-       
-   if (br.hp <= 0) {
-  br.alive = false;
-  combo++;
-  comboTimer = 90;
-  final points = 10 * level + combo * 5;
-  score += points;
-  spawnParticles(particles, br.x + br.w / 2, br.y + br.h / 2, br.color, 16);
-  _addScorePopup(br.x + br.w / 2, br.y + br.h / 2, points, br.color);
-  SoundManager.instance.playBrickDestroy();
-  // Check if this was the center brick   
-      
-  // Check if this was the center brick
-  final brIndex = bricks.indexOf(br);
-  if (brIndex == centerBrickIndex && !whirlgigActive) {
-    _triggerWhirlgig(br.x + br.w / 2, br.y + br.h / 2);
-  }
-  // Drop hidden power if brick had one
-  
-  if (br.hiddenPower != null) {
-  // Only drop if not already used this level
-  bool alreadyUsed = false;
-  // if (br.hiddenPower == PowerupType.flowerpot && flowerpotUsedThisLevel) alreadyUsed = true; // disabled
-  if (br.hiddenPower == PowerupType.fire      && fireUsedThisLevel)      alreadyUsed = true;
-  if (br.hiddenPower == PowerupType.big       && bigUsedThisLevel)       alreadyUsed = true;
-  if (br.hiddenPower == PowerupType.multi     && multiUsedThisLevel)     alreadyUsed = true;
-  if (br.hiddenPower == PowerupType.wide      && wideUsedThisLevel)      alreadyUsed = true;
-  if (br.hiddenPower == PowerupType.laser     && laserUsedThisLevel)     alreadyUsed = true;
-
-  if (!alreadyUsed) {
-    drops.add(PowerupDrop(
-      x: br.x + br.w / 2,
-      y: br.y + br.h / 2,
-      type: br.hiddenPower!,
-      label: '🌸 FLOWER',
-      color: const Color(0xFFFF69B4),
-      w: screenW * 0.22,
-      h: 28,
-    ));
-  }
-} else {
-    
-    final drop = trySpawnDrop(
-  br.x + br.w / 2, br.y + br.h / 2, screenW,
-  countFire: fireUsedThisLevel ? 0 : countFire,
-  countBig: bigUsedThisLevel ? 0 : countBig,
-  countMulti: multiUsedThisLevel ? 0 : countMulti,
-  countWide: wideUsedThisLevel ? 0 : countWide,
-  countLaser: laserUsedThisLevel ? 0 : countLaser,
-  // countFlowerpot: flowerpotUsedThisLevel ? 0 : countFlowerpot, // disabled
-  countGun: gunUsedThisLevel ? 0 : 1,
-);
-    
-    if (drop != null) drops.add(drop);
-  }
-        
-        } else {
-          spawnParticles(particles, br.x + br.w / 2, br.y + br.h / 2, br.color, 4);
-        }
-        break;
+    // ── Brick descent ────────────────────────────────────────────────────────
+    final descentThisFrame = brickDescentSpeed + level * 0.008;
+    brickDescentY += descentThisFrame;
+    // Frozen bricks: counteract descent by pushing their base Y up
+    for (final br in bricks) {
+      if (br.alive && br.isFrozen) {
+        br.y -= descentThisFrame; // cancel this frame's descent — they appear frozen
       }
-
-      if (b.y - b.r > screenH) toRemove.add(b);
     }
 
-    balls.removeWhere((b) => toRemove.contains(b));
+    // Check if any brick has crossed past the paddle (lose a life)
+    bool brickPassed = false;
+    for (final br in bricks) {
+      if (!br.alive) continue;
+      if (br.y + brickDescentY + br.h > padY) {
+        br.alive = false; // remove that brick
+        brickPassed = true;
+      }
+    }
+    if (brickPassed) {
+      lives--;
+      perfectClear = false;
+      SoundManager.instance.playBallLost();
+      if (lives <= 0) {
+        state = GameState.dead;
+        if (score > best) best = score;
+      }
+    }
 
-    if (balls.isEmpty) {
-  lives--;
-  perfectClear = false;
-  SoundManager.instance.playBallLost();
-  if (lives <= 0) {
-    state = GameState.dead;
-    if (score > best) best = score;
-  } else {
-    balls = [makeBall(screenW: screenW, padY: padY, level: level)];
-  }
-}
-
-    // Update drops
+    // ── Update drops ─────────────────────────────────────────────────────────
+    if (drops.length > 8) drops.removeRange(0, drops.length - 8);
     drops.removeWhere((d) {
       d.update();
+      // Adjust drop y for descent (drops spawn at brick position which already includes descent)
       if (d.x > padX && d.x < padX + padW &&
           d.y + d.h / 2 > padY && d.y - d.h / 2 < padY + padH) {
         _applyPowerup(d.type);
@@ -456,306 +277,278 @@ if (b.laser && (puLaserT % 10 == 0)) {
       return d.y > screenH + 30;
     });
 
-
-/* FLOWERPOT DISABLED
-if (flowerpotActive) {
-  flowerpotT--;
-if (flowerpotT <= 0) {
-  flowerpotActive = false;
-  flowerpotParticles.clear();
-  padW = min(screenW * 0.28, 120);
-  padX = (screenW / 2) - (padW / 2);
-}
-
-// FLOWERPOT PARTICLE LOGIC DISABLED
-*/ // end FLOWERPOT DISABLED block
-
-
-// Update whirlgig
-if (whirlgigActive) {
-  whirlgigT--;
-  if (whirlgigT <= 0) {
-    whirlgigActive = false;
-    whirlgigParticles.clear();
-  }
-  for (final p in whirlgigParticles) {
-    final delay = p['delay'] as int;
-    if (delay > 0) {
-      p['delay'] = delay - 1;
-      continue;
-    }
-    p['active'] = true;
-    p['x'] = (p['x'] as double) + (p['vx'] as double);
-    p['y'] = (p['y'] as double) + (p['vy'] as double);
-    p['vy'] = (p['vy'] as double) + 0.05; // gravity
-    p['vx'] = (p['vx'] as double) * 0.99; // drag
-    p['life'] = (p['life'] as double) - (p['decay'] as double);
-  }
-  whirlgigParticles.removeWhere((p) => (p['life'] as double) <= 0);
-}
-
-// Update score popups
-for (final p in scorePopups) {
-  p['age'] = (p['age'] as double) + 1.0;
-  p['y'] = (p['y'] as double) + (p['vy'] as double);
-  p['vy'] = (p['vy'] as double) * 0.92;
-  p['life'] = (p['life'] as double) - 0.022;
-}
-scorePopups.removeWhere((p) => (p['life'] as double) <= 0);
-    // Update particles
+    // ── Particles (capped at 200 for performance) ───────────────────────────
+    if (particles.length > 80) particles.removeRange(0, particles.length - 80);
     particles.removeWhere((p) => !p.update());
 
-    // Level timer
-    levelFrameCount++;
-    if (starAnimT > 0) starAnimT--;
+    // ── Score popups ─────────────────────────────────────────────────────────
+    if (scorePopups.length > 15) scorePopups.removeRange(0, scorePopups.length - 15);
+    for (final p in scorePopups) {
+      p['age'] = (p['age'] as double) + 1.0;
+      p['y'] = (p['y'] as double) + (p['vy'] as double);
+      p['vy'] = (p['vy'] as double) * 0.92;
+      p['life'] = (p['life'] as double) - 0.022;
+    }
+    scorePopups.removeWhere((p) => (p['life'] as double) <= 0);
 
+    // ── Shake bricks + tick frozen frames ─────────────────────────────────────
+    for (final br in bricks) {
+      if (br.shakeFrames > 0) br.shakeFrames--;
+      if (br.frozenFrames > 0) br.frozenFrames--;
+    }
 
-    // Combo timer
+    // ── Life flash timer ──────────────────────────────────────────────────────
+    if (lifeFlashTimer > 0) lifeFlashTimer--;
+
+    // ── Combo timer ──────────────────────────────────────────────────────────
     if (comboTimer > 0) {
       comboTimer--;
     } else {
       combo = 0;
     }
 
-    // Last-life pulse timer
-    if (lives == 1) {
-      lastLifePulseT++;
-    } else {
-      lastLifePulseT = 0;
-    }
-    // Lucky save countdown
-    if (luckyT > 0) luckyT--;
+    levelFrameCount++;
+    if (starAnimT > 0) starAnimT--;
 
-    // Shake bricks
-    for (final br in bricks) {
-      if (br.shakeFrames > 0) br.shakeFrames--;
-    }
-
-    // Level clear
+    // ── Level clear ──────────────────────────────────────────────────────────
     if (bricks.every((b) => !b.alive)) {
       state = GameState.clear;
       SoundManager.instance.playLevelUp();
-      // Calculate stars
-      int stars = 1; // always get 1 star for clearing
-      if (perfectClear) stars++; // 2nd star: no lives lost
-      if (levelFrameCount < 30 * 60) stars++; // 3rd star: under 30 seconds (60fps)
+      int stars = 1;
+      if (perfectClear) stars++;
+      if (levelFrameCount < 30 * 60) stars++;
       lastLevelStars = stars;
-      // Save best star count for this level
       if ((levelStars[level] ?? 0) < stars) levelStars[level] = stars;
       showStarAnimation = true;
-      starAnimT = 120; // 2 seconds of star animation
-      
-      // Stay on clear screen — user taps to advance via nextLevel()
+      starAnimT = 120;
     }
 
     notifyListeners();
   }
 
+  void _spawnBullets() {
+    final type = activeBulletType;
 
-void nextLevel() {
-  if (state != GameState.clear) return;
-  level++;
-  puFire = puBig = puMulti = puWide = puLaser = false;
-  puFireT = puBigT = puMultiT = puWideT = puLaserT = 0;
-  laserUsedThisLevel = false;
-  fireUsedThisLevel = false;
-  bigUsedThisLevel = false;
-  multiUsedThisLevel = false;
-  wideUsedThisLevel = false;
-  flowerpotUsedThisLevel = false;
-  whirlgigUsedThisLevel = false;
-  magnetUsedThisLevel = false;
-  gunUsedThisLevel = true; puGun = true; puGunT = -1; bullets.clear(); gunFireCooldown = 0; // gun always active
-  countFire = 1; countBig = 1; countMulti = 1; countWide = 1; countLaser = 1; countFlowerpot = 1;
-  laserRays.clear();
-  puMagnet = true; puMagnetT = 300; magnetUsedThisLevel = false; // magnet gift on every level start
-  // flowerpotActive = false; // flowerpot disabled
-  // flowerpotT = 0;
-  // flowerpotParticles.clear();
-  drops.clear();
-  scorePopups.clear();
-  livesAtLevelStart = lives;
-  levelFrameCount = 0;
-  perfectClear = true;
-  showStarAnimation = false;
-  starAnimT = 0;
-  _resetPaddle();
-  bricks = makeBricks(screenW: screenW, screenH: screenH, level: level);
-  _markCenterBrick();
-  balls = [makeBall(screenW: screenW, padY: padY, level: level)];
-  // Trigger boss countdown if this is a boss level
-  if (level % 5 == 0) {
-    bossCountdownActive = true;
-    bossCountdownT = 180; // 3 seconds at 60fps
-    state = GameState.paused; // freeze game during countdown
-  } else {
-    state = GameState.playing;
-  }
-  notifyListeners();
-}
-
-void _markCenterBrick() {
-  if (bricks.isEmpty) return;
-  // Find brick closest to center of screen
-  double centerX = screenW / 2;
-  double centerY = screenH / 2;
-  double minDist = double.infinity;
-  centerBrickIndex = 0;
-  for (int i = 0; i < bricks.length; i++) {
-    final br = bricks[i];
-    final bx = br.x + br.w / 2;
-    final by = br.y + br.h / 2;
-    final dist = sqrt((bx - centerX) * (bx - centerX) + (by - centerY) * (by - centerY));
-    if (dist < minDist) {
-      minDist = dist;
-      centerBrickIndex = i;
-    }
-  }
-}
-
-
-void _triggerWhirlgig(double x, double y) {
-  if (whirlgigUsedThisLevel) return;
-  whirlgigUsedThisLevel = true;
-  whirlgigActive = true;
-  whirlgigT = 240; // 3 seconds
-  SoundManager.instance.playWhirlgig();
-  whirlgigX = x;
-  whirlgigY = y;
-  whirlgigParticles.clear();
-
-  final rng = Random();
-  // Spawn spiral firework particles
-  for (int ring = 0; ring < 4; ring++) {
-    for (int i = 0; i < 12; i++) {
-      final angle = (i / 20) * 3.14159 * 2;
-      final speed = 2.0 + ring * 1.5;
-      final delay = ring * 8; // staggered rings
-      if (whirlgigParticles.length < 50) {
-        whirlgigParticles.add({
-        'x': x, 'y': y,
-        'vx': cos(angle) * speed,
-        'vy': sin(angle) * speed,
-        'life': 1.0,
-        'decay': 0.008 + rng.nextDouble() * 0.005,
-        'r': 3.0 + rng.nextDouble() * 4,
-        'color': [
-          0xFFFF4444, 0xFFFFE135, 0xFF00FF88,
-          0xFF00E5FF, 0xFFFF00FF, 0xFFFF8800,
-        ][ring % 6],
-        'delay': delay,
-        'active': false,
-      });
+    // All bullet types share the same normalBullets pool
+    if (normalBullets <= 0) {
+      lives--;
+      lifeFlashTimer = 60;
+      if (lives <= 0) {
+        lives = 0;
+        gameOverByBullets = true;
+        state = GameState.dead;
+        if (score > best) best = score;
+        SoundManager.instance.stopMusic();
+        notifyListeners();
+      } else {
+        normalBullets = 200; // refill for next life
+        activeBulletType = BulletType.normal;
+        notifyListeners();
       }
+      return;
+    }
+    normalBullets -= 2; // deduct 2 per shot (left + right)
+
+    final left  = Bullet(x: padX + 6,        y: padY - 8, vy: -16.0, type: type);
+    final right = Bullet(x: padX + padW - 6, y: padY - 8, vy: -16.0, type: type);
+    if (bullets.length < 16) {
+      bullets.add(left);
+      bullets.add(right);
     }
   }
 
-  // Also destroy nearby bricks in radius
-  for (final br in bricks) {
-    if (!br.alive) continue;
-    final bx = br.x + br.w / 2;
-    final by = br.y + br.h / 2;
-    final dist = sqrt((bx - x) * (bx - x) + (by - y) * (by - y));
-    if (dist < screenW * 0.4) {
-      br.hp = 0;
-      br.alive = false;
-      score += 10 * level;
-      spawnParticles(particles, bx, by, br.color, 12);
+  void _spawnWhirlgigSplit(double x, double y) {
+    // Only 2 split bullets, lower speed — no further splitting
+    for (final angle in [-0.4, 0.4]) {
+      const spd = 10.0;
+      bullets.add(Bullet(
+        x: x, y: y,
+        vx: sin(angle) * spd,
+        vy: -cos(angle) * spd,
+        type: BulletType.normal, // use normal type so splits don't chain-split
+      ));
     }
   }
-}
 
- 
-void _addScorePopup(double x, double y, int points, Color brickColor) {
-  // Pick color based on points value
-  int color;
-  if (points >= 50) {
-    color = 0xFFFF00FF; // magenta for big scores
-  } else if (points >= 30) color = 0xFFFFE135; // yellow for medium
-  else if (points >= 20) color = 0xFF00FF88; // green
-  else                   color = 0xFF00E5FF; // cyan for small
+  void _destroyBrick(Brick br, [BulletType bulletType = BulletType.normal]) {
+    br.alive = false;
+    combo++;
+    comboTimer = 90;
+    final points = 10 * level + combo * 5;
+    score += points;
+    final cx = br.x + br.w / 2;
+    final cy = br.y + brickDescentY + br.h / 2;
 
-  scorePopups.add({
-    'x': x,
-    'y': y,
-    'vy': -5.0,       // fast initial upward burst
-    'life': 1.0,
-    'age': 0.0,
-    'points': points,
-    'color': color,
-    'combo': combo,   // store combo for size scaling
-  });
-}
+    // ── Special brick effects ──────────────────────────────────────
+    switch (br.brickType) {
+      case BrickType.bomb:
+        spawnBombExplosion(particles, cx, cy);
+        SoundManager.instance.playWhirlgig(); // reuse big boom sound
+        // Destroy all bricks within blast radius (cap at 10 for performance)
+        final blastR = screenW * 0.35;
+        int blastCount = 0;
+        for (final other in bricks) {
+          if (!other.alive || other == br || blastCount >= 10) continue;
+          final ox = other.x + other.w / 2;
+          final oy = other.y + brickDescentY + other.h / 2;
+          final dist = sqrt((ox - cx) * (ox - cx) + (oy - cy) * (oy - cy));
+          if (dist < blastR) {
+            other.alive = false;
+            score += 10 * level;
+            blastCount++;
+            spawnNormalExplosion(particles, ox, oy, other.color); // lighter explosion per brick
+          }
+        }
+      case BrickType.shield:
+        spawnShieldBreak(particles, cx, cy);
+      case BrickType.colorBomb:
+        spawnColorBombExplosion(particles, cx, cy);
+        SoundManager.instance.playMultiPower();
+        // Destroy all bricks of same color
+        final targetColor = br.color.value;
+        // Store original colors to compare (colorBomb is white, compare previously assigned)
+        // Instead destroy all bricks sharing the same original brickColors index
+        // We'll destroy all normal-colored bricks with matching color
+        for (final other in bricks) {
+          if (!other.alive || other == br) continue;
+          if (other.brickType == BrickType.normal || other.brickType == BrickType.colorBomb) {
+            // destroy random ~1/3 of bricks as "color wave"
+            // Actually: destroy all bricks in same row
+          }
+        }
+        // Simpler: destroy all bricks sharing same row Y position
+        int rowCount = 0;
+        for (final other in bricks) {
+          if (!other.alive || other == br || rowCount >= 12) continue;
+          if ((other.y - br.y).abs() < 5) { // same row
+            other.alive = false;
+            score += 10 * level;
+            rowCount++;
+            spawnNormalExplosion(particles, other.x + other.w / 2, other.y + brickDescentY + other.h / 2, other.color);
+          }
+        }
+      case BrickType.ice:
+        spawnIceShatter(particles, cx, cy);
+        // Freeze nearby bricks — pause their descent
+        final freezeR = screenW * 0.30;
+        for (final other in bricks) {
+          if (!other.alive || other == br) continue;
+          final ox = other.x + other.w / 2;
+          final oy = other.y + brickDescentY + other.h / 2;
+          final dist = sqrt((ox - cx) * (ox - cx) + (oy - cy) * (oy - cy));
+          if (dist < freezeR) {
+            other.frozenFrames = 180; // 3 seconds frozen
+          }
+        }
+      case BrickType.fountain:
+        spawnFountainBurst(particles, cx, cy);
+        SoundManager.instance.playWidePower();
+        // Spray 6 bonus bullets upward from the brick position
+        for (int i = 0; i < 4; i++) {
+          final angle = -pi * 0.5 + (i - 1.5) * 0.25;
+          bullets.add(Bullet(
+            x: cx, y: cy,
+            vx: cos(angle) * 10, vy: sin(angle) * 10,
+            type: activeBulletType,
+          ));
+        }
+      case BrickType.normal:
+        // Per bullet-type explosion
+        switch (bulletType) {
+          case BulletType.fire:     spawnFireExplosion(particles, cx, cy, br.color);
+          case BulletType.laser:    spawnLaserExplosion(particles, cx, cy, br.color);
+          case BulletType.whirlgig: spawnWhirlgigExplosion(particles, cx, cy, br.color);
+          case BulletType.normal:   spawnNormalExplosion(particles, cx, cy, br.color);
+        }
+    }
 
- void _applyPowerup(PowerupType type) {
-  switch (type) {
-    case PowerupType.fire:
-      if (countFire <= 0 || fireUsedThisLevel) break;
-      fireUsedThisLevel = true;
-      puFire = true; puFireT = puDuration;
-      countFire--;
-      for (var b in balls) {
-        b.fire = true;
-       }
-        SoundManager.instance.playFirePower();
-    case PowerupType.big:
-      if (countBig <= 0 || bigUsedThisLevel) break;
-      bigUsedThisLevel = true;
-      puBig = true; puBigT = puDuration;
-      countBig--;
-      for (var b in balls) {
-        b.r = screenW * 0.045;
+    // Normal bullet explosion for all non-normal types too (layered on top)
+    if (br.brickType != BrickType.normal) {
+      spawnNormalExplosion(particles, cx, cy, br.color);
+    }
+
+    _addScorePopup(cx, cy, points, br.color);
+    SoundManager.instance.playBrickDestroy();
+    final drop = trySpawnDrop(cx, br.y + brickDescentY + br.h / 2, screenW, level: level);
+    if (drop != null) {
+      final currentCount = levelDropCount[drop.type] ?? 0;
+      // Block if this type already hit 4 drops this level
+      // Also block bullet powers if their pool is empty
+      bool blocked = currentCount >= 1;
+      if (!blocked) {
+        levelDropCount[drop.type] = currentCount + 1;
+        drops.add(drop);
       }
-        SoundManager.instance.playBigPower();
-
-    case PowerupType.multi:
-      if (countMulti <= 0 || multiUsedThisLevel) break;
-      multiUsedThisLevel = true;
-      puMulti = true; puMultiT = puDuration;
-      countMulti--;
-      if (balls.isNotEmpty) {
-        final orig = balls.first;
-        balls.add(makeBall(screenW: screenW, padY: padY, level: level,
-            x: orig.x, y: orig.y, vx: orig.vx + 3, vy: orig.vy));
-        balls.add(makeBall(screenW: screenW, padY: padY, level: level,
-            x: orig.x, y: orig.y, vx: orig.vx - 3, vy: orig.vy));
-      }
-      SoundManager.instance.playMultiPower();
-    case PowerupType.life:
-      lives = min(lives + 1, 10);
-    case PowerupType.wide:
-      if (countWide <= 0 || wideUsedThisLevel) break;
-      wideUsedThisLevel = true;
-      puWide = true; puWideT = puDuration;
-      countWide--;
-      padW = min(screenW * 0.55, 220);
-      padX = padX.clamp(0, screenW - padW);
-      SoundManager.instance.playWidePower();
-    case PowerupType.laser:
-      if (countLaser <= 0 || laserUsedThisLevel) break;
-      laserUsedThisLevel = true;
-      puLaser = true; puLaserT = puDuration;
-      countLaser--;
-      for (var b in balls) {
-        b.laser = true;
-        b.r = screenW * 0.03;
-      }
-      SoundManager.instance.playLaserPower();
-    case PowerupType.flowerpot:
-      break; // disabled
-    case PowerupType.whirlgig:
-  break;
-    case PowerupType.magnet:
-      if (magnetUsedThisLevel) break;
-      magnetUsedThisLevel = true;
-      puMagnet = true;
-      puMagnetT = 300;
-    case PowerupType.gun:
-      if (gunUsedThisLevel) break;
-      gunUsedThisLevel = true;
-      puGun = true;
-      puGunT = 600; // 10 seconds
-      gunFireCooldown = 0;
+    }
   }
-}
+
+  void nextLevel() {
+    if (state != GameState.clear) return;
+    level++;
+    activeBulletType = BulletType.normal;
+    normalBullets = 200;
+    lifeFlashTimer = 0;
+    gameOverByBullets = false;
+    puWide = false; puWideT = 0;
+    brickDescentY = 0.0;
+    bullets.clear();
+    laserRays.clear();
+    drops.clear();
+    levelDropCount = {PowerupType.fire: 0, PowerupType.laser: 0, PowerupType.whirlgig: 0, PowerupType.wide: 0};
+    scorePopups.clear();
+    gunFireCooldown = 0;
+    livesAtLevelStart = lives;
+    levelFrameCount = 0;
+    perfectClear = true;
+    showStarAnimation = false;
+    starAnimT = 0;
+    _resetPaddle();
+    bricks = makeBricks(screenW: screenW, screenH: screenH, level: level);
+    if (level % 5 == 0) {
+      bossCountdownActive = true;
+      bossCountdownT = 180;
+      state = GameState.paused;
+    } else {
+      state = GameState.playing;
+    }
+    notifyListeners();
+  }
+
+  void _addScorePopup(double x, double y, int points, Color brickColor) {
+    int color;
+    if (points >= 50) {
+      color = 0xFFFF00FF;
+    } else if (points >= 30) color = 0xFFFFE135;
+    else if (points >= 20) color = 0xFF00FF88;
+    else color = 0xFF00E5FF;
+    scorePopups.add({'x': x, 'y': y, 'vy': -5.0, 'life': 1.0, 'age': 0.0, 'points': points, 'color': color, 'combo': combo});
+  }
+
+  void _applyPowerup(PowerupType type) {
+    switch (type) {
+      case PowerupType.fire:
+        if (level >= 5) {
+          activeBulletType = BulletType.fire;
+          SoundManager.instance.playFirePower();
+        }
+      case PowerupType.laser:
+        if (level >= 10) {
+          activeBulletType = BulletType.laser;
+          SoundManager.instance.playLaserPower();
+        }
+      case PowerupType.whirlgig:
+        if (level >= 25) {
+          activeBulletType = BulletType.whirlgig;
+          SoundManager.instance.playWhirlgig();
+        }
+      case PowerupType.wide:
+        puWide = true;
+        puWideT = puDuration;
+        padW = min(screenW * 0.55, 220);
+        padX = padX.clamp(0, screenW - padW);
+        SoundManager.instance.playWidePower();
+      case PowerupType.life:
+        lives = min(lives + 1, 9);
+    }
+  }
 }

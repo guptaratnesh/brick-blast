@@ -1,45 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:audioplayers/audioplayers.dart';
-
 import 'game_controller.dart';
+import 'game_models.dart';
 import 'game_painter.dart';
 import 'sound_manager.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
-
-  @override
-  State<GameScreen> createState() => _GameScreenState();
+  @override State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen>
-    with SingleTickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateMixin {
   late final GameController _game;
   late final Ticker _ticker;
+  late final GamePainter _painter;
   double _animTime = 0;
   bool _initialized = false;
+  double _screenW = 0, _screenH = 0;
 
   @override
-void initState() {
-  super.initState();
-  _game = GameController();
-
-  // BASIC AUDIO TEST
-  Future.delayed(const Duration(seconds: 3), () async {
-    print('=== AUDIO TEST START ===');
-    try {
-      final player = AudioPlayer();
-      await player.setVolume(1.0);
-      final result = await player.play(AssetSource('background_music.mp3'));
-      print('=== PLAY CALLED ===');
-    } catch (e) {
-      print('=== AUDIO ERROR: $e ===');
-    }
-  });
-
-  // Game loop via Ticker (synced to display refresh rate)
-  _ticker = createTicker((elapsed) {
+  void initState() {
+    super.initState();
+    _game = GameController();
+    _painter = GamePainter(_game, 0);
+    _ticker = createTicker((elapsed) {
       _animTime = elapsed.inMilliseconds / 1000.0;
       _game.update();
     });
@@ -47,141 +31,111 @@ void initState() {
   }
 
   @override
-  void dispose() {
-    _ticker.dispose();
-    _game.dispose();
-    super.dispose();
+  void dispose() { _ticker.dispose(); _game.dispose(); super.dispose(); }
+
+  void _handleStripTap(Offset pos) {
+    // Only intercept strip taps during gameplay
+    if (_game.state == GameState.playing) {
+      final types = [BulletType.normal, BulletType.fire, BulletType.laser, BulletType.whirlgig];
+      final rects = _painter.powerStripSlotRects(_screenW, _screenH);
+      for (int i = 0; i < rects.length; i++) {
+        if (rects[i].contains(pos)) {
+          _game.selectBulletType(types[i]);
+          return;
+        }
+      }
+    }
+    _handleTap(pos); // fall through for menu/dead/clear states
   }
 
-  
-  
   void _handleTap(Offset pos) {
-  if (_game.state == GameState.menu || _game.state == GameState.dead) {
-    _game.startGame();
-    SoundManager.instance.playMusic();
-  } else if (_game.state == GameState.paused) {
-    _game.togglePause();
-  } else if (_game.state == GameState.clear) {
-    _game.nextLevel();
-  } else if (_game.state == GameState.playing) {
-    // Tap skin icon area (top-right, roughly where emoji is)
-    final screenW = MediaQuery.of(context).size.width;
-    final skinIconX = screenW - 108;
-    if (pos.dx > skinIconX - 24 && pos.dx < skinIconX + 24 && pos.dy < 100) {
-      _game.cyclePaddleSkin();
+    if (_game.state == GameState.menu || _game.state == GameState.dead) {
+      _game.startGame();
+      SoundManager.instance.playMusic();
+    } else if (_game.state == GameState.clear) {
+      _game.nextLevel();
+    } else if (_game.state == GameState.paused && !_game.bossCountdownActive) {
+      _game.togglePause();
     }
   }
-}
 
   void _handleDrag(Offset pos) {
-    if (_game.state == GameState.playing) {
-      _game.movePaddle(pos.dx);
-    }
+    if (_game.state == GameState.playing) _game.movePaddle(pos.dx);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: Colors.black,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final w = constraints.maxWidth;
           final h = constraints.maxHeight;
-
-          // Initialize once we know screen size
           if (!_initialized && w > 0 && h > 0) {
             _initialized = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _game.init(w, h);
-            });
+            _screenW = w; _screenH = h;
+            WidgetsBinding.instance.addPostFrameCallback((_) => _game.init(w, h));
           }
-
           return GestureDetector(
-            // Tap to start / retry
-            onTapDown: (d) => _handleTap(d.localPosition),
-
-            // Drag to move paddle — horizontal pan anywhere on screen
+            onTapDown: (d) => _handleStripTap(d.localPosition),
             onHorizontalDragStart: (d) { _game.isTouching = true; _handleDrag(d.localPosition); },
             onHorizontalDragUpdate: (d) => _handleDrag(d.localPosition),
-            onHorizontalDragEnd: (d) => _game.isTouching = false,
+            onHorizontalDragEnd: (_) => _game.isTouching = false,
             onHorizontalDragCancel: () => _game.isTouching = false,
-
-            // Also handle vertical drag start so it doesn't get ignored
             onPanStart: (d) { _game.isTouching = true; _handleDrag(d.localPosition); },
             onPanUpdate: (d) => _handleDrag(d.localPosition),
-            onPanEnd: (d) => _game.isTouching = false,
+            onPanEnd: (_) => _game.isTouching = false,
             onPanCancel: () => _game.isTouching = false,
-
             child: AnimatedBuilder(
-  animation: _game,
-  builder: (context, _) {
-    return Stack(
-      children: [
-        // Game canvas
-        CustomPaint(
-          painter: GamePainter(_game, _animTime),
-          size: Size(w, h),
-          child: const SizedBox.expand(),
-        ),
-
-        // Pause button top right
-        if (_game.state == GameState.playing ||
-            _game.state == GameState.paused)
-          Positioned(
-            top: 55,
-            right: 12,
-            child: GestureDetector(
-              onTap: () {
-  _game.togglePause();
-  if (_game.state == GameState.paused) {
-    SoundManager.instance.pauseMusic();
-  } else {
-    SoundManager.instance.resumeMusic();
-  }
-},
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 1,
+              animation: _game,
+              builder: (context, _) {
+                return Stack(children: [
+                  CustomPaint(
+                    painter: GamePainter(_game, _animTime), // painter instance used for hit-testing
+                    size: Size(w, h),
+                    child: const SizedBox.expand(),
                   ),
-                ),
-                child: Center(
-                  child: Text(
-                    _game.state == GameState.paused ? '▶' : '⏸',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.white,
+                  if (_game.state == GameState.playing || _game.state == GameState.paused)
+                    Positioned(
+                      top: 55, right: 12,
+                      child: GestureDetector(
+                        onTap: () {
+                          _game.togglePause();
+                          if (_game.state == GameState.paused) {
+                            SoundManager.instance.pauseMusic();
+                          } else {
+                            SoundManager.instance.resumeMusic();
+                          }
+                        },
+                        child: Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+                          ),
+                          child: Center(child: Text(
+                            _game.state == GameState.paused ? '▶' : '⏸',
+                            style: const TextStyle(fontSize: 16, color: Colors.white),
+                          )),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
+                  if (_game.state == GameState.paused && !_game.bossCountdownActive)
+                    Positioned.fill(child: GestureDetector(
+                      onTap: () {
+                        _game.togglePause();
+                        if (_game.state == GameState.paused) {
+                          SoundManager.instance.pauseMusic();
+                        } else {
+                          SoundManager.instance.resumeMusic();
+                        }
+                      },
+                      behavior: HitTestBehavior.translucent,
+                    )),
+                ]);
+              },
             ),
-          ),
-
-        // Tap anywhere to resume when paused
-        if (_game.state == GameState.paused)
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: () {
-  _game.togglePause();
-  if (_game.state == GameState.paused) {
-    SoundManager.instance.pauseMusic();
-  } else {
-    SoundManager.instance.resumeMusic();
-  }
-},
-              behavior: HitTestBehavior.translucent,
-            ),
-          ),
-      ],
-    );
-  },
-),
           );
         },
       ),
